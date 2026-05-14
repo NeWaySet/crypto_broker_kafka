@@ -44,6 +44,9 @@ services:
         /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic sensors.raw --partitions 1 --replication-factor 1
         /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic sensors.crypto --partitions 1 --replication-factor 1
         /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic sensors.data.filtered --partitions 1 --replication-factor 1
+        /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic messages.raw --partitions 1 --replication-factor 1
+        /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic messages.crypto --partitions 1 --replication-factor 1
+        /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic messages.filtered --partitions 1 --replication-factor 1
         /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic policy.requests --partitions 1 --replication-factor 1
         /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic policy.decisions --partitions 1 --replication-factor 1
         /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --list
@@ -56,7 +59,8 @@ services:
         condition: service_completed_successfully
     environment:
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
-      KAFKA_TOPIC: sensors.raw
+      KAFKA_CHAT_TOPIC: messages.raw
+      KAFKA_SENSOR_TOPIC: sensors.raw
     stdin_open: true
     tty: true
     networks:
@@ -92,8 +96,9 @@ services:
         condition: service_started
     environment:
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
-      KAFKA_INPUT_TOPIC: sensors.raw
-      KAFKA_OUTPUT_TOPIC: sensors.crypto
+      KAFKA_INPUT_TOPICS: messages.raw,sensors.raw
+      KAFKA_CHAT_OUTPUT_TOPIC: messages.crypto
+      KAFKA_SENSOR_OUTPUT_TOPIC: sensors.crypto
       KAFKA_POLICY_REQUEST_TOPIC: policy.requests
       KAFKA_POLICY_DECISION_TOPIC: policy.decisions
       KAFKA_GROUP_ID: crypto-gateway
@@ -112,8 +117,9 @@ services:
         condition: service_started
     environment:
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
-      KAFKA_INPUT_TOPIC: sensors.crypto
-      KAFKA_OUTPUT_TOPIC: sensors.data.filtered
+      KAFKA_INPUT_TOPICS: messages.crypto,sensors.crypto
+      KAFKA_CHAT_OUTPUT_TOPIC: messages.filtered
+      KAFKA_SENSOR_OUTPUT_TOPIC: sensors.data.filtered
       KAFKA_GROUP_ID: sensor-filter
       CRYPTO_KEY: 0KzFWuB9s4ms2Y_KzYlu2fRu1jLHCIuZbcTF3jp2FtQ=
     networks:
@@ -128,8 +134,31 @@ services:
         condition: service_completed_successfully
     environment:
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
-      KAFKA_TOPIC: sensors.data.filtered
-      KAFKA_GROUP_ID: sensor-viewer
+      KAFKA_TOPICS: messages.filtered,sensors.data.filtered
+      KAFKA_GROUP_ID: secure-viewer
+    networks:
+      - kafka-network
+    restart: unless-stopped
+
+  app:
+    build: ./app
+    container_name: secure-messenger-app
+    ports:
+      - "8088:8080"
+    depends_on:
+      kafka-init:
+        condition: service_completed_successfully
+      crypto-gateway:
+        condition: service_started
+      filter:
+        condition: service_started
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      KAFKA_CHAT_INPUT_TOPIC: messages.raw
+      KAFKA_SENSOR_INPUT_TOPIC: sensors.raw
+      KAFKA_CHAT_OUTPUT_TOPIC: messages.filtered
+      KAFKA_SENSOR_OUTPUT_TOPIC: sensors.data.filtered
+      KAFKA_GROUP_ID: web-ui
     networks:
       - kafka-network
     restart: unless-stopped
@@ -138,7 +167,7 @@ services:
     image: grafana/grafana:latest
     container_name: kafka-grafana
     ports:
-      - "3000:3000"
+      - "3001:3000"
     environment:
       GF_SECURITY_ADMIN_USER: admin
       GF_SECURITY_ADMIN_PASSWORD: admin

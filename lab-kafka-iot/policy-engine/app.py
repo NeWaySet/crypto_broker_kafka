@@ -30,7 +30,9 @@ class PolicyDecisionPoint:
         if message_type not in self.policy["allowed_message_types"]:
             reasons.append("message_type_not_allowed")
 
-        text = str(payload.get("text", ""))
+        text = str(payload.get("text", payload.get("message", "")))
+        if message_type == "chat-message" and not text.strip():
+            reasons.append("empty_message")
         if len(text) > self.policy["limits"]["max_text_length"]:
             reasons.append("text_too_long")
 

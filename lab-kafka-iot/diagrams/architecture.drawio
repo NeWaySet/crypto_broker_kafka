@@ -1,22 +1,28 @@
 <mxfile host="app.diagrams.net">
-  <diagram name="Cyberimmune Crypto Containers">
+  <diagram name="Secure Messenger And Sensors">
     <mxGraphModel dx="1200" dy="800" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1169" pageHeight="827" math="0" shadow="0">
       <root>
         <mxCell id="0"/>
         <mxCell id="1" parent="0"/>
-        <mxCell id="producer" value="Producer&lt;br&gt;user / sensor input" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1"><mxGeometry x="40" y="280" width="150" height="70" as="geometry"/></mxCell>
-        <mxCell id="raw" value="Kafka&lt;br&gt;sensors.raw" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1"><mxGeometry x="250" y="280" width="150" height="70" as="geometry"/></mxCell>
-        <mxCell id="gateway" value="Crypto Gateway&lt;br&gt;PEP + Facade" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1"><mxGeometry x="470" y="265" width="170" height="100" as="geometry"/></mxCell>
-        <mxCell id="policy" value="Policy Engine&lt;br&gt;PDP" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1"><mxGeometry x="470" y="90" width="170" height="80" as="geometry"/></mxCell>
-        <mxCell id="crypto" value="Kafka&lt;br&gt;sensors.crypto" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1"><mxGeometry x="710" y="280" width="150" height="70" as="geometry"/></mxCell>
-        <mxCell id="filter" value="Filter&lt;br&gt;decrypt + sanitize" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1"><mxGeometry x="930" y="265" width="170" height="100" as="geometry"/></mxCell>
-        <mxCell id="consumer" value="Consumer / Grafana&lt;br&gt;filtered data only" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1"><mxGeometry x="930" y="450" width="170" height="80" as="geometry"/></mxCell>
-        <mxCell id="e1" value="plain JSON" style="endArrow=block;html=1;rounded=0;" edge="1" parent="1" source="producer" target="raw"><mxGeometry relative="1" as="geometry"/></mxCell>
-        <mxCell id="e2" value="consume" style="endArrow=block;html=1;rounded=0;" edge="1" parent="1" source="raw" target="gateway"><mxGeometry relative="1" as="geometry"/></mxCell>
-        <mxCell id="e3" value="policy request / decision" style="endArrow=block;html=1;rounded=0;" edge="1" parent="1" source="gateway" target="policy"><mxGeometry relative="1" as="geometry"/></mxCell>
-        <mxCell id="e4" value="crypto container" style="endArrow=block;html=1;rounded=0;" edge="1" parent="1" source="gateway" target="crypto"><mxGeometry relative="1" as="geometry"/></mxCell>
-        <mxCell id="e5" value="decrypt" style="endArrow=block;html=1;rounded=0;" edge="1" parent="1" source="crypto" target="filter"><mxGeometry relative="1" as="geometry"/></mxCell>
-        <mxCell id="e6" value="sensors.data.filtered" style="endArrow=block;html=1;rounded=0;" edge="1" parent="1" source="filter" target="consumer"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="app" value="Web App&lt;br&gt;chat + sensors" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1"><mxGeometry x="40" y="250" width="150" height="80" as="geometry"/></mxCell>
+        <mxCell id="chatraw" value="Kafka&lt;br&gt;messages.raw" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1"><mxGeometry x="250" y="170" width="150" height="70" as="geometry"/></mxCell>
+        <mxCell id="sensorraw" value="Kafka&lt;br&gt;sensors.raw" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1"><mxGeometry x="250" y="340" width="150" height="70" as="geometry"/></mxCell>
+        <mxCell id="gateway" value="Crypto Gateway&lt;br&gt;PEP + Facade" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1"><mxGeometry x="470" y="250" width="170" height="100" as="geometry"/></mxCell>
+        <mxCell id="policy" value="Policy Engine&lt;br&gt;PDP" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1"><mxGeometry x="470" y="70" width="170" height="80" as="geometry"/></mxCell>
+        <mxCell id="chatcrypto" value="Kafka&lt;br&gt;messages.crypto" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1"><mxGeometry x="710" y="170" width="160" height="70" as="geometry"/></mxCell>
+        <mxCell id="sensorcrypto" value="Kafka&lt;br&gt;sensors.crypto" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1"><mxGeometry x="710" y="340" width="160" height="70" as="geometry"/></mxCell>
+        <mxCell id="filter" value="Filter&lt;br&gt;decrypt + sanitize" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1"><mxGeometry x="940" y="250" width="170" height="100" as="geometry"/></mxCell>
+        <mxCell id="result" value="messages.filtered&lt;br&gt;sensors.data.filtered" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1"><mxGeometry x="1180" y="250" width="180" height="100" as="geometry"/></mxCell>
+        <mxCell id="e1" value="chat" style="endArrow=block;html=1;rounded=0;" edge="1" parent="1" source="app" target="chatraw"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e2" value="sensor values" style="endArrow=block;html=1;rounded=0;" edge="1" parent="1" source="app" target="sensorraw"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e3" value="raw inputs" style="endArrow=block;html=1;rounded=0;" edge="1" parent="1" source="chatraw" target="gateway"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e4" value="raw inputs" style="endArrow=block;html=1;rounded=0;" edge="1" parent="1" source="sensorraw" target="gateway"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e5" value="policy request / decision" style="endArrow=block;html=1;rounded=0;" edge="1" parent="1" source="gateway" target="policy"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e6" value="chat container" style="endArrow=block;html=1;rounded=0;" edge="1" parent="1" source="gateway" target="chatcrypto"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e7" value="sensor container" style="endArrow=block;html=1;rounded=0;" edge="1" parent="1" source="gateway" target="sensorcrypto"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e8" value="decrypt" style="endArrow=block;html=1;rounded=0;" edge="1" parent="1" source="chatcrypto" target="filter"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e9" value="decrypt" style="endArrow=block;html=1;rounded=0;" edge="1" parent="1" source="sensorcrypto" target="filter"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e10" value="filtered" style="endArrow=block;html=1;rounded=0;" edge="1" parent="1" source="filter" target="result"><mxGeometry relative="1" as="geometry"/></mxCell>
       </root>
     </mxGraphModel>
   </diagram>

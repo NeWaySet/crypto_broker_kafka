@@ -1,122 +1,122 @@
-# Система обмена сообщениями с криптографической защитой
+# Crypto Broker Kafka
 
-Этот проект - учебный прототип системы обмена сообщениями с криптографической защитой информации.  
-Он сделан на Docker Compose, Apache Kafka и Python. Сообщение проходит через несколько изолированных контейнеров, а полезная нагрузка перед обработкой упаковывается в криптоконтейнер.
+Учебный проект: защищенный мини-мессенджер на Kafka с криптоконтейнерами, политикой безопасности и отдельным потоком данных датчиков.
 
-Главная идея: компоненты не доверяют друг другу полностью и общаются только через Kafka-топики по заданной политике безопасности.
+В системе есть два независимых пользовательских сценария:
 
-## Что делает проект
+1. **Переписка** - пользователь отправляет текстовые сообщения через веб-интерфейс.
+2. **Датчики** - пользователь отправляет значения температуры и влажности, которые можно визуализировать в Grafana.
 
-Пользователь вводит сообщение в `producer`. Дальше система:
+Оба сценария проходят один и тот же безопасный маршрут: policy check -> encryption -> crypto container -> decrypt -> sanitize/filter -> filtered topic.
 
-1. Отправляет исходное сообщение в Kafka-топик `sensors.raw`.
-2. Передает сообщение в `crypto-gateway`.
-3. `crypto-gateway` спрашивает у `policy-engine`, можно ли обрабатывать это сообщение.
-4. Если политика отвечает `allow`, `crypto-gateway` шифрует payload и создает криптоконтейнер.
-5. Криптоконтейнер публикуется в Kafka-топик `sensors.crypto`.
-6. `filter` расшифровывает криптоконтейнер, очищает и валидирует данные.
-7. Валидное сообщение попадает в `sensors.data.filtered`.
-8. `consumer` читает итоговое сообщение.
-9. `grafana` можно использовать для визуализации данных из Kafka.
+## Быстрый запуск
 
-Схема потока:
-
-```text
-producer
-  -> sensors.raw
-  -> crypto-gateway
-  -> policy-engine
-  -> sensors.crypto
-  -> filter
-  -> sensors.data.filtered
-  -> consumer / grafana
+```powershell
+cd "C:\Users\HONOR\Documents\New project 8\lab-kafka-iot"
+docker compose up --build -d kafka kafka-init policy-engine crypto-gateway filter consumer app grafana
 ```
 
-## Структура проекта
+Открыть веб-интерфейс:
 
 ```text
-lab-kafka-iot/
-├── docker-compose.yml
-├── README.md
-├── policy/
-│   └── policy.json
-├── producer/
-│   ├── app.py
-│   └── Dockerfile
-├── policy-engine/
-│   ├── app.py
-│   └── Dockerfile
-├── crypto-gateway/
-│   ├── app.py
-│   └── Dockerfile
-├── filter/
-│   ├── app.py
-│   └── Dockerfile
-├── consumer/
-│   ├── app.py
-│   └── Dockerfile
-└── diagrams/
-    ├── architecture.drawio
-    └── sequence.drawio
+http://localhost:8088
+```
+
+Открыть Grafana:
+
+```text
+http://localhost:3001
+login: admin
+password: admin
+```
+
+Проверить контейнеры:
+
+```powershell
+docker compose ps
+```
+
+## Что именно сделано
+
+Проект не смешивает переписку и данные датчиков в одном топике. Потоки разделены:
+
+| Поток | Raw topic | Crypto topic | Filtered topic |
+|---|---|---|---|
+| Чат | `messages.raw` | `messages.crypto` | `messages.filtered` |
+| Датчики | `sensors.raw` | `sensors.crypto` | `sensors.data.filtered` |
+
+Это удобно для защиты и для демонстрации:
+
+- переписку можно показывать как таблицу сообщений;
+- датчики можно визуализировать в Grafana как графики температуры и влажности;
+- в промежуточных `*.crypto` топиках лежит не открытый JSON, а криптоконтейнер с `ciphertext`.
+
+## Архитектура
+
+```text
+web app / producer
+  -> messages.raw или sensors.raw
+  -> crypto-gateway
+  -> policy-engine
+  -> messages.crypto или sensors.crypto
+  -> filter
+  -> messages.filtered или sensors.data.filtered
+  -> consumer / grafana
 ```
 
 ## Компоненты
 
-### `kafka`
+### `app`
 
-Apache Kafka в режиме KRaft.  
-Это брокер сообщений. Он не обрабатывает бизнес-логику, а только хранит и передает сообщения между контейнерами.
+Минимальный веб-интерфейс на Flask.
 
-Основные топики:
+Адрес:
 
-| Топик | Назначение |
-|---|---|
-| `sensors.raw` | исходные сообщения от producer |
-| `policy.requests` | запросы на проверку политики |
-| `policy.decisions` | ответы `allow/deny` от policy-engine |
-| `sensors.crypto` | зашифрованные криптоконтейнеры |
-| `sensors.data.filtered` | расшифрованные, очищенные и валидные сообщения |
+```text
+http://localhost:8088
+```
+
+В интерфейсе две формы:
+
+- отправка сообщения в чат;
+- отправка значений датчика.
+
+Ниже отображаются последние обработанные сообщения из `messages.filtered` и `sensors.data.filtered`.
 
 ### `producer`
 
-Контейнер для ручного ввода сообщений.  
-Он не шифрует данные сам. Его задача - принять текст или JSON от пользователя и отправить в `sensors.raw`.
+Консольная альтернатива веб-интерфейсу.
 
-Примеры сообщений:
+Запуск:
+
+```powershell
+docker compose run --rm producer
+```
+
+Обычный текст уйдет в `messages.raw`:
 
 ```text
-Hello secure Kafka
+Привет, это сообщение в защищенный чат
 ```
+
+JSON с температурой/влажностью уйдет в `sensors.raw`:
 
 ```json
 {"sensor_id":"sensor_1","temperature":23.4,"humidity":48.2}
 ```
 
-Также есть команда:
-
-```text
-/sample
-```
-
-Она генерирует тестовое сообщение датчика.
+Команда `/sample` отправит тестовые данные датчика.
 
 ### `policy-engine`
 
-Компонент принятия решений безопасности.  
-Он читает запросы из `policy.requests`, проверяет их по файлу [policy.json](./policy/policy.json) и отправляет результат в `policy.decisions`.
+Компонент принятия решений безопасности.
 
-Пример решения:
+Он читает запросы из `policy.requests`, проверяет их по [policy.json](./policy/policy.json) и отправляет решение в `policy.decisions`.
 
-```json
-{
-  "request_id": "...",
-  "decision": "allow",
-  "reasons": [],
-  "policy_version": "1.0"
-}
-```
+Возможные решения:
 
-Если сообщение нарушает политику, решение будет `deny`, и `crypto-gateway` не пропустит его дальше.
+- `allow` - сообщение можно шифровать и передавать дальше;
+- `deny` - сообщение отбрасывается.
 
 ### `crypto-gateway`
 
@@ -124,231 +124,175 @@ Hello secure Kafka
 
 Он:
 
-1. Читает сообщение из `sensors.raw`.
-2. Определяет тип сообщения.
+1. Читает `messages.raw` и `sensors.raw`.
+2. Определяет тип сообщения: `chat-message` или `sensor-data`.
 3. Отправляет запрос в `policy.requests`.
-4. Ждет решение из `policy.decisions`.
-5. Если решение `allow`, шифрует payload.
-6. Публикует криптоконтейнер в `sensors.crypto`.
+4. Ждет ответ из `policy.decisions`.
+5. Если ответ `allow`, шифрует payload.
+6. Публикует криптоконтейнер в `messages.crypto` или `sensors.crypto`.
 
-Криптоконтейнер выглядит примерно так:
+Пример криптоконтейнера:
 
 ```json
 {
   "container_version": "1.0",
+  "message_type": "chat-message",
+  "source_topic": "messages.raw",
   "algorithm": "Fernet(AES-128-CBC-HMAC-SHA256)",
   "ciphertext": "gAAAAAB...",
   "policy": {
     "decision": "allow",
     "policy_version": "1.0"
-  },
-  "created_at": "2026-05-13T20:32:05+00:00"
+  }
 }
 ```
 
-Важный момент: в `sensors.crypto` уже нет открытого JSON с температурой и влажностью. Там лежит зашифрованное поле `ciphertext`.
-
 ### `filter`
 
-Компонент безопасной обработки данных.
+Компонент безопасной обработки.
 
 Он:
 
-1. Читает криптоконтейнер из `sensors.crypto`.
-2. Расшифровывает payload.
-3. Очищает текстовые сообщения от опасных фрагментов.
-4. Проверяет данные датчиков.
-5. Публикует валидный результат в `sensors.data.filtered`.
+1. Читает `messages.crypto` и `sensors.crypto`.
+2. Расшифровывает криптоконтейнер.
+3. Очищает текст от `<script>...</script>`.
+4. Проверяет датчики по диапазонам.
+5. Публикует результат в `messages.filtered` или `sensors.data.filtered`.
 
-Правила проверки:
+Правила для датчиков:
 
 | Поле | Условие |
 |---|---|
 | `temperature` | от `-20` до `50` |
 | `humidity` | от `0` до `100` |
-| `text` | обрезается до 240 символов, удаляются `<script>...</script>` |
 
 ### `consumer`
 
-Контейнер для просмотра результата в консоли.  
-Он читает только `sensors.data.filtered`, то есть уже безопасно обработанные сообщения.
+Консольный просмотр результата.  
+Читает оба итоговых топика:
 
-### `grafana`
+- `messages.filtered`;
+- `sensors.data.filtered`.
 
-Grafana не нужна для самого обмена сообщениями.  
-Она нужна, чтобы можно было визуализировать данные: например, строить графики температуры и влажности по Kafka-топику `sensors.data.filtered`.
-
-Адрес:
-
-```text
-http://localhost:3000
-```
-
-Логин и пароль:
-
-```text
-admin / admin
-```
-
-## Как запустить
-
-Открой PowerShell в папке проекта:
-
-```powershell
-cd "C:\Users\HONOR\Documents\New project 8\lab-kafka-iot"
-```
-
-Запусти все контейнеры:
-
-```powershell
-docker compose up --build -d kafka kafka-init policy-engine crypto-gateway filter consumer grafana
-```
-
-Проверить состояние:
-
-```powershell
-docker compose ps
-```
-
-Должны быть запущены:
-
-```text
-kafka-broker
-policy-engine
-crypto-gateway
-kafka-filter
-kafka-consumer
-kafka-grafana
-```
-
-## Как отправить сообщение
-
-Запусти интерактивный producer:
-
-```powershell
-docker compose run --rm producer
-```
-
-Появится приглашение:
-
-```text
->
-```
-
-Введи, например:
-
-```json
-{"sensor_id":"sensor_1","temperature":23.4,"humidity":48.2}
-```
-
-Или обычный текст:
-
-```text
-Привет, это защищенное сообщение
-```
-
-Или тестовое сообщение:
-
-```text
-/sample
-```
-
-Выйти из producer:
-
-```text
-/quit
-```
-
-## Где смотреть результат
-
-Логи принятия решения политикой:
-
-```powershell
-docker compose logs -f policy-engine
-```
-
-Логи создания криптоконтейнера:
-
-```powershell
-docker compose logs -f crypto-gateway
-```
-
-Логи расшифрования и фильтрации:
-
-```powershell
-docker compose logs -f filter
-```
-
-Итоговые сообщения:
+Логи:
 
 ```powershell
 docker compose logs -f consumer
 ```
 
-## Как доказать, что сообщение шифруется
+### `grafana`
 
-Можно прочитать одно сообщение из топика `sensors.crypto`:
+Grafana нужна для визуализации.
+
+Идея для демонстрации:
+
+- `sensors.data.filtered` - графики температуры и влажности;
+- `messages.filtered` - таблица переписки.
+
+Kafka datasource:
+
+```text
+Bootstrap server: kafka:9092
+Sensor topic: sensors.data.filtered
+Message topic: messages.filtered
+```
+
+## Проверка работы
+
+### 1. Отправить сообщение через веб
+
+Открой:
+
+```text
+http://localhost:8088
+```
+
+В блоке “Сообщение” введи текст и нажми отправку.  
+Через пару секунд сообщение появится в `messages.filtered`.
+
+### 2. Отправить данные датчика через веб
+
+В блоке “Сенсор” введи температуру и влажность.  
+Результат появится в `sensors.data.filtered`.
+
+### 3. Посмотреть логи политики
+
+```powershell
+docker compose logs -f policy-engine
+```
+
+Там будет видно:
+
+```text
+DECISION -> {"decision": "allow", ...}
+```
+
+### 4. Посмотреть создание криптоконтейнера
+
+```powershell
+docker compose logs -f crypto-gateway
+```
+
+Пример:
+
+```text
+SEALED -> type=chat-message topic=messages.crypto
+SEALED -> type=sensor-data topic=sensors.crypto
+```
+
+### 5. Доказать, что в Kafka лежит ciphertext
+
+Для чата:
+
+```powershell
+docker exec kafka-broker /opt/kafka/bin/kafka-console-consumer.sh --bootstrap-server localhost:9092 --topic messages.crypto --from-beginning --timeout-ms 3000 --max-messages 1
+```
+
+Для датчиков:
 
 ```powershell
 docker exec kafka-broker /opt/kafka/bin/kafka-console-consumer.sh --bootstrap-server localhost:9092 --topic sensors.crypto --from-beginning --timeout-ms 3000 --max-messages 1
 ```
 
-В результате будет видно поле `ciphertext`, например:
+В результате будет поле:
 
 ```json
-{
-  "container_version": "1.0",
-  "algorithm": "Fernet(AES-128-CBC-HMAC-SHA256)",
-  "ciphertext": "gAAAAABqBN_FHxNKKjLRzy4AmmRmd7oD..."
-}
+"ciphertext": "gAAAAAB..."
 ```
 
-Это означает, что в промежуточном топике Kafka лежит не открытое сообщение, а криптоконтейнер.
+Это значит, что промежуточный топик хранит не открытое сообщение, а криптоконтейнер.
 
-## Как проверить отказ политики
+## Проверка отказа политики
 
-Политика запрещает некорректные значения датчиков. Например, температура `999` не пройдет:
-
-```powershell
-docker compose run --rm producer
-```
-
-Ввести:
+Отправь датчик с неправильной температурой:
 
 ```json
 {"sensor_id":"bad_sensor","temperature":999,"humidity":40}
 ```
 
-После этого в логах `policy-engine` будет решение `deny`, а в `crypto-gateway` сообщение будет отброшено.
+Ожидаемое поведение:
 
-## Где находится политика
+- `policy-engine` вернет `deny`;
+- `crypto-gateway` не создаст криптоконтейнер;
+- сообщение не попадет в `sensors.data.filtered`.
 
-Файл политики:
+## Политика безопасности
+
+Файл:
 
 ```text
 policy/policy.json
 ```
 
-Сейчас политика задает:
+Сейчас политика разрешает:
 
-```json
-{
-  "default_decision": "deny",
-  "allowed_sources": ["producer:json", "producer:text", "producer:/sample"],
-  "allowed_message_types": ["sensor-data", "text-message"],
-  "limits": {
-    "max_text_length": 240,
-    "temperature_min": -20.0,
-    "temperature_max": 50.0,
-    "humidity_min": 0.0,
-    "humidity_max": 100.0
-  }
-}
-```
+- источники `web:chat`, `web:sensor`, `producer:chat`, `producer:sensor`, `producer:/sample`;
+- типы `chat-message` и `sensor-data`;
+- текст длиной до 240 символов;
+- температуру от `-20` до `50`;
+- влажность от `0` до `100`.
 
-Если нужно поменять допустимые значения температуры или влажности, редактируется именно этот файл.
-
-После изменения политики перезапусти `policy-engine`:
+После изменения политики:
 
 ```powershell
 docker compose restart policy-engine
@@ -356,63 +300,71 @@ docker compose restart policy-engine
 
 ## Кибериммунный подход
 
-В проекте применена декомпозиция на изолированные компоненты:
+Система разделена на изолированные компоненты с минимальными обязанностями:
 
 | Компонент | Минимальная ответственность |
 |---|---|
-| `producer` | только ввод и отправка исходного сообщения |
-| `policy-engine` | только принятие решения безопасности |
-| `crypto-gateway` | только применение политики и шифрование |
-| `filter` | только расшифрование, очистка и валидация |
-| `consumer` | только чтение безопасного результата |
-| `kafka` | только передача сообщений |
+| `app` / `producer` | ввод сообщений |
+| `policy-engine` | принятие решения безопасности |
+| `crypto-gateway` | применение политики и шифрование |
+| `filter` | расшифрование, очистка, валидация |
+| `consumer` / `grafana` | просмотр результата |
+| `kafka` | доставка сообщений |
 
-Так уменьшается поверхность защиты:
+Почему это уменьшает поверхность защиты:
 
-- producer не имеет ключа расшифрования;
-- consumer не видит сырые сообщения;
+- UI не имеет ключа расшифрования;
+- consumer не читает raw-топики;
 - policy-engine отделен от crypto-gateway;
-- открытые данные не публикуются в промежуточный защищенный топик;
-- каждый контейнер можно анализировать отдельно.
+- открытые данные не публикуются в `*.crypto`;
+- чат и датчики разведены по разным топикам.
 
-## Шаблоны конструктивной информационной безопасности
+## Использованные шаблоны
 
-Использованы идеи из СКИБ:
+### Шаблоны конструктивной информационной безопасности
 
-### Раздельное принятие и применение решений о безопасности
+Использованы идеи из <https://securitybydesign.ru/templates/>.
 
-`policy-engine` принимает решение `allow/deny`, а `crypto-gateway` применяет это решение.  
-Это полезно, потому что логика политики отделена от логики обработки данных.
+| Шаблон | Где в проекте |
+|---|---|
+| Раздельное принятие и применение решений о безопасности | `policy-engine` принимает решение, `crypto-gateway` применяет |
+| Выделенный обработчик для очистки данных | `filter` очищает и валидирует данные перед итоговым топиком |
+| Минимизация поверхности защиты | каждый контейнер выполняет одну узкую функцию |
 
-### Выделенный обработчик для очистки данных
-
-`filter` выполняет очистку и валидацию перед публикацией результата.  
-Это снижает риск, что дальше по цепочке уйдут опасные или некорректные данные.
-
-Источник: <https://securitybydesign.ru/templates/>
-
-## Шаблоны проектирования ПО
-
-В коде использованы несколько шаблонов:
-
-| Шаблон | Где используется | Зачем |
-|---|---|---|
-| Strategy | `MessageTypeStrategy` в `crypto-gateway/app.py` | определяет тип сообщения |
-| Facade | `CryptoContainerFacade` в `crypto-gateway/app.py` | скрывает детали шифрования |
-| Adapter | `CryptoContainerAdapter` в `filter/app.py` | преобразует криптоконтейнер обратно в payload |
-| Factory Method style | функции `connect()` | единый способ создавать Kafka-клиенты |
+### Шаблоны проектирования ПО
 
 Источник: <https://refactoringu.ru/ru/design-patterns/catalog.html>
 
-## Как остановить
+| Шаблон | Где используется | Зачем |
+|---|---|---|
+| Strategy | `MessageTypeStrategy` в `crypto-gateway/app.py` | определить тип сообщения и нужный поток |
+| Facade | `CryptoContainerFacade` в `crypto-gateway/app.py` | скрыть детали шифрования |
+| Adapter | `CryptoContainerAdapter` в `filter/app.py` | открыть криптоконтейнер как обычный payload |
+| Factory Method style | функции `connect()` | единый способ создавать Kafka producer/consumer |
 
-Остановить контейнеры:
+## Структура проекта
+
+```text
+lab-kafka-iot/
+├── app/                 # веб-интерфейс
+├── consumer/            # просмотр итоговых топиков
+├── crypto-gateway/      # policy enforcement + encryption
+├── filter/              # decrypt + sanitize + validate
+├── policy/              # policy.json
+├── policy-engine/       # policy decision point
+├── producer/            # CLI producer
+├── diagrams/            # draw.io схемы
+├── docker-compose.yml
+└── README.md
+```
+
+## Остановка
 
 ```powershell
 docker compose down
 ```
 
-Остановить и удалить volume Grafana:
+Остановка с удалением volume Grafana:
 
 ```powershell
 docker compose down -v
@@ -420,25 +372,25 @@ docker compose down -v
 
 ## Полезные команды
 
-Показать все контейнеры проекта:
-
-```powershell
-docker compose ps
-```
-
-Показать все топики Kafka:
+Список топиков:
 
 ```powershell
 docker exec kafka-broker /opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list
 ```
 
-Посмотреть сообщения в итоговом топике:
+Сообщения чата:
+
+```powershell
+docker exec kafka-broker /opt/kafka/bin/kafka-console-consumer.sh --bootstrap-server localhost:9092 --topic messages.filtered --from-beginning --timeout-ms 3000
+```
+
+Данные датчиков:
 
 ```powershell
 docker exec kafka-broker /opt/kafka/bin/kafka-console-consumer.sh --bootstrap-server localhost:9092 --topic sensors.data.filtered --from-beginning --timeout-ms 3000
 ```
 
-Пересобрать контейнеры:
+Пересборка:
 
 ```powershell
 docker compose build

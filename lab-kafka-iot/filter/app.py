@@ -11,9 +11,10 @@ from kafka.errors import NoBrokersAvailable
 
 
 BOOTSTRAP_SERVERS = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "kafka:9092")
-INPUT_TOPIC = os.getenv("KAFKA_INPUT_TOPIC", "sensors.crypto")
-OUTPUT_TOPIC = os.getenv("KAFKA_OUTPUT_TOPIC", "sensors.data.filtered")
-GROUP_ID = os.getenv("KAFKA_GROUP_ID", "sensor-filter")
+INPUT_TOPICS = [topic.strip() for topic in os.getenv("KAFKA_INPUT_TOPICS", "messages.crypto,sensors.crypto").split(",")]
+CHAT_OUTPUT_TOPIC = os.getenv("KAFKA_CHAT_OUTPUT_TOPIC", "messages.filtered")
+SENSOR_OUTPUT_TOPIC = os.getenv("KAFKA_SENSOR_OUTPUT_TOPIC", "sensors.data.filtered")
+GROUP_ID = os.getenv("KAFKA_GROUP_ID", "secure-filter")
 CRYPTO_KEY = os.environ["CRYPTO_KEY"].encode("utf-8")
 
 
@@ -34,10 +35,11 @@ class Sanitizer:
 
     def clean(self, payload: dict) -> dict:
         cleaned = dict(payload)
-        if "text" in cleaned:
-            text = str(cleaned["text"])
+        text_key = "message" if "message" in cleaned else "text"
+        if text_key in cleaned:
+            text = str(cleaned[text_key])
             text = self.SCRIPT_RE.sub("", text)
-            cleaned["text"] = text[:240]
+            cleaned[text_key] = text[:240]
         return cleaned
 
 
@@ -45,12 +47,12 @@ def now_iso() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
-def validate(payload: dict) -> tuple[bool, str]:
-    has_temperature = "temperature" in payload
-    has_humidity = "humidity" in payload
-
-    if not has_temperature and not has_humidity:
-        return True, "text-message"
+def validate(payload: dict, message_type: str) -> tuple[bool, str]:
+    if message_type == "chat-message":
+        text = str(payload.get("message", payload.get("text", ""))).strip()
+        if not text:
+            return False, "empty message"
+        return True, "chat-message"
 
     try:
         temperature = float(payload.get("temperature"))
@@ -65,11 +67,17 @@ def validate(payload: dict) -> tuple[bool, str]:
     return True, "sensor-data"
 
 
+def output_topic_for(message_type: str) -> str:
+    if message_type == "sensor-data":
+        return SENSOR_OUTPUT_TOPIC
+    return CHAT_OUTPUT_TOPIC
+
+
 def connect() -> tuple[KafkaConsumer, KafkaProducer]:
     for attempt in range(1, 31):
         try:
             consumer = KafkaConsumer(
-                INPUT_TOPIC,
+                *INPUT_TOPICS,
                 bootstrap_servers=BOOTSTRAP_SERVERS,
                 group_id=GROUP_ID,
                 auto_offset_reset="earliest",
@@ -91,11 +99,12 @@ def connect() -> tuple[KafkaConsumer, KafkaProducer]:
 
 def main() -> None:
     print("=" * 64)
-    print("Secure filter: sensors.crypto -> sensors.data.filtered")
+    print("Secure filter: crypto topics -> filtered topics")
     print("=" * 64)
     print(f"Broker: {BOOTSTRAP_SERVERS}")
-    print(f"Input:  {INPUT_TOPIC}")
-    print(f"Output: {OUTPUT_TOPIC}")
+    print(f"Input:  {INPUT_TOPICS}")
+    print(f"Chat output:   {CHAT_OUTPUT_TOPIC}")
+    print(f"Sensor output: {SENSOR_OUTPUT_TOPIC}")
     print("-" * 64)
 
     opener = CryptoContainerAdapter(CRYPTO_KEY)
@@ -103,20 +112,24 @@ def main() -> None:
     consumer, producer = connect()
     try:
         for message in consumer:
+            container = message.value
+            message_type = container.get("message_type", "chat-message")
             try:
-                payload = opener.open(message.value)
+                payload = opener.open(container)
             except (InvalidToken, KeyError, ValueError) as exc:
                 print(f"DROP crypto_error={exc}")
                 continue
 
             payload = sanitizer.clean(payload)
-            is_valid, reason = validate(payload)
+            is_valid, reason = validate(payload, message_type)
+            payload["message_type"] = message_type
             payload["validated_at"] = now_iso()
             payload["validation_result"] = reason
 
             if is_valid:
-                producer.send(OUTPUT_TOPIC, value=payload).get(timeout=15)
-                print(f"OK -> {json.dumps(payload, ensure_ascii=False)}")
+                output_topic = output_topic_for(message_type)
+                producer.send(output_topic, value=payload).get(timeout=15)
+                print(f"OK -> topic={output_topic} {json.dumps(payload, ensure_ascii=False)}")
             else:
                 print(f"DROP ({reason}) -> {json.dumps(payload, ensure_ascii=False)}")
     finally:

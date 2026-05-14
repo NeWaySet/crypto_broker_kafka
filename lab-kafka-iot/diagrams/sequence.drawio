@@ -1,19 +1,21 @@
 <mxfile host="app.diagrams.net">
-  <diagram name="Secure Message Flow">
+  <diagram name="Secure Flow">
     <mxGraphModel dx="1200" dy="800" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1169" pageHeight="827" math="0" shadow="0">
       <root>
         <mxCell id="0"/>
         <mxCell id="1" parent="0"/>
         <mxCell id="u" value="User" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1"><mxGeometry x="40" y="70" width="130" height="50" as="geometry"/></mxCell>
-        <mxCell id="p" value="Producer" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1"><mxGeometry x="240" y="70" width="130" height="50" as="geometry"/></mxCell>
-        <mxCell id="g" value="Crypto Gateway" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1"><mxGeometry x="450" y="70" width="150" height="50" as="geometry"/></mxCell>
-        <mxCell id="pe" value="Policy Engine" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1"><mxGeometry x="680" y="70" width="150" height="50" as="geometry"/></mxCell>
-        <mxCell id="f" value="Filter / Consumer" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1"><mxGeometry x="920" y="70" width="160" height="50" as="geometry"/></mxCell>
-        <mxCell id="a1" value="1. input text / JSON" style="endArrow=block;html=1;" edge="1" parent="1" source="u" target="p"><mxGeometry relative="1" as="geometry"/></mxCell>
-        <mxCell id="a2" value="2. publish sensors.raw" style="endArrow=block;html=1;" edge="1" parent="1" source="p" target="g"><mxGeometry relative="1" as="geometry"/></mxCell>
-        <mxCell id="a3" value="3. request policy decision" style="endArrow=block;html=1;" edge="1" parent="1" source="g" target="pe"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="app" value="Web App" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1"><mxGeometry x="230" y="70" width="130" height="50" as="geometry"/></mxCell>
+        <mxCell id="g" value="Crypto Gateway" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1"><mxGeometry x="430" y="70" width="150" height="50" as="geometry"/></mxCell>
+        <mxCell id="pe" value="Policy Engine" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1"><mxGeometry x="660" y="70" width="150" height="50" as="geometry"/></mxCell>
+        <mxCell id="f" value="Filter" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1"><mxGeometry x="890" y="70" width="130" height="50" as="geometry"/></mxCell>
+        <mxCell id="r" value="UI / Grafana" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1"><mxGeometry x="1080" y="70" width="140" height="50" as="geometry"/></mxCell>
+        <mxCell id="a1" value="1. chat or sensor input" style="endArrow=block;html=1;" edge="1" parent="1" source="u" target="app"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="a2" value="2. messages.raw / sensors.raw" style="endArrow=block;html=1;" edge="1" parent="1" source="app" target="g"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="a3" value="3. ask policy" style="endArrow=block;html=1;" edge="1" parent="1" source="g" target="pe"><mxGeometry relative="1" as="geometry"/></mxCell>
         <mxCell id="a4" value="4. allow / deny" style="endArrow=block;html=1;" edge="1" parent="1" source="pe" target="g"><mxGeometry relative="1" as="geometry"/></mxCell>
-        <mxCell id="a5" value="5. publish crypto container" style="endArrow=block;html=1;" edge="1" parent="1" source="g" target="f"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="a5" value="5. crypto container" style="endArrow=block;html=1;" edge="1" parent="1" source="g" target="f"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="a6" value="6. filtered topics" style="endArrow=block;html=1;" edge="1" parent="1" source="f" target="r"><mxGeometry relative="1" as="geometry"/></mxCell>
       </root>
     </mxGraphModel>
   </diagram>

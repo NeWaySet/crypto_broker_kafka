@@ -11,7 +11,8 @@ from kafka.errors import NoBrokersAvailable
 
 
 BOOTSTRAP_SERVERS = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "kafka:9092")
-TOPIC = os.getenv("KAFKA_TOPIC", "sensors.raw")
+CHAT_TOPIC = os.getenv("KAFKA_CHAT_TOPIC", "messages.raw")
+SENSOR_TOPIC = os.getenv("KAFKA_SENSOR_TOPIC", "sensors.raw")
 
 
 def now_iso() -> str:
@@ -20,6 +21,7 @@ def now_iso() -> str:
 
 def sample_sensor_message() -> dict:
     return {
+        "kind": "sensor",
         "sensor_id": "manual-demo",
         "temperature": round(random.uniform(18, 34), 2),
         "humidity": round(random.uniform(35, 85), 2),
@@ -28,26 +30,34 @@ def sample_sensor_message() -> dict:
     }
 
 
-def parse_user_message(raw: str) -> dict:
+def parse_user_message(raw: str) -> tuple[str, dict]:
     raw = raw.strip()
     if not raw:
         raise ValueError("Empty message was not sent")
 
     if raw == "/sample":
-        return sample_sensor_message()
+        return SENSOR_TOPIC, sample_sensor_message()
 
     try:
         payload = json.loads(raw)
         if not isinstance(payload, dict):
-            raise ValueError('JSON must be an object, for example {"text": "..."}')
+            raise ValueError('JSON must be an object, for example {"message": "..."}')
         payload.setdefault("timestamp", now_iso())
-        payload.setdefault("source", "producer:json")
-        return payload
+        if "temperature" in payload or "humidity" in payload:
+            payload.setdefault("kind", "sensor")
+            payload.setdefault("source", "producer:sensor")
+            return SENSOR_TOPIC, payload
+        payload.setdefault("kind", "chat")
+        payload.setdefault("sender", "cli")
+        payload.setdefault("message", payload.pop("text", ""))
+        payload.setdefault("source", "producer:chat")
+        return CHAT_TOPIC, payload
     except json.JSONDecodeError:
-        return {
-            "sensor_id": "manual-text",
-            "text": raw,
-            "source": "producer:text",
+        return CHAT_TOPIC, {
+            "kind": "chat",
+            "sender": "cli",
+            "message": raw,
+            "source": "producer:chat",
             "timestamp": now_iso(),
         }
 
@@ -71,10 +81,11 @@ def connect_with_retry() -> KafkaProducer:
 
 def main() -> int:
     print("=" * 64)
-    print("Cyberimmune Kafka producer: user input")
+    print("Secure Kafka producer: chat and sensor input")
     print("=" * 64)
-    print(f"Topic: {TOPIC}")
-    print("Enter text, JSON, or /sample. The message will be encrypted by crypto-gateway.")
+    print(f"Chat topic:   {CHAT_TOPIC}")
+    print(f"Sensor topic: {SENSOR_TOPIC}")
+    print("Text goes to chat. JSON with temperature/humidity goes to sensors. /sample sends sensor data.")
     print("Exit: /quit or Ctrl+C")
     print("-" * 64)
 
@@ -86,15 +97,15 @@ def main() -> int:
             if raw.strip() in {"/quit", "/exit"}:
                 break
             try:
-                payload = parse_user_message(raw)
+                topic, payload = parse_user_message(raw)
             except ValueError as exc:
                 print(exc)
                 continue
 
-            metadata = producer.send(TOPIC, value=payload).get(timeout=15)
+            metadata = producer.send(topic, value=payload).get(timeout=15)
             sent_count += 1
             print(
-                f"Sent #{sent_count}: partition={metadata.partition}, "
+                f"Sent #{sent_count}: topic={topic}, partition={metadata.partition}, "
                 f"offset={metadata.offset}, payload={json.dumps(payload, ensure_ascii=False)}"
             )
     except (KeyboardInterrupt, EOFError):
