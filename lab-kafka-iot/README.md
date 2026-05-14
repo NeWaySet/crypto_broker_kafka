@@ -353,7 +353,7 @@ lab-kafka-iot/
 ├── policy/              # policy.json
 ├── policy-engine/       # policy decision point
 ├── producer/            # CLI producer
-├── diagrams/            # draw.io схемы
+├── diagrams/            # draw.io схемы: architecture, sequence, class UML
 ├── docker-compose.yml
 └── README.md
 ```
