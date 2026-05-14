@@ -7,6 +7,7 @@ interface MainLayoutProps {
   profile: DemoProfile;
   settings: Settings;
   users: User[];
+  userSearchResults: User[];
   chats: Chat[];
   allChats: Chat[];
   messages: Message[];
@@ -30,6 +31,7 @@ interface MainLayoutProps {
   onToggleRightPanel: () => void;
   onOpenSettings: () => void;
   onCreateChat: (type: Chat["type"]) => void;
+  onStartChatWithUser: (user: User) => void;
   onLogout: () => void;
   onSend: (text: string, attachments: Attachment[]) => void;
   onSendVoice: () => void;
@@ -62,11 +64,13 @@ export function MainLayout(props: MainLayoutProps) {
         filter={props.filter}
         query={props.query}
         users={props.users}
+        userSearchResults={props.userSearchResults}
         onFilterChange={props.onFilterChange}
         onQueryChange={props.onQueryChange}
         onSelectChat={props.onSelectChat}
         onOpenSettings={props.onOpenSettings}
         onCreateChat={props.onCreateChat}
+        onStartChatWithUser={props.onStartChatWithUser}
         onLogout={props.onLogout}
         onUpdateChat={props.onUpdateChat}
         onClearHistory={props.onClearHistory}

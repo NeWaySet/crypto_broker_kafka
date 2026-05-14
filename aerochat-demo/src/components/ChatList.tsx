@@ -1,6 +1,7 @@
+import type { MouseEvent } from "react";
 import type { Chat, Message, User } from "../types";
-import { EmptyState } from "./EmptyState";
 import { ChatListItem } from "./ChatListItem";
+import { EmptyState } from "./EmptyState";
 
 interface ChatListProps {
   chats: Chat[];
@@ -9,12 +10,12 @@ interface ChatListProps {
   currentUserId: string;
   users: User[];
   onSelectChat: (chatId: string) => void;
-  onContextMenu: (event: React.MouseEvent, chat: Chat) => void;
+  onContextMenu: (event: MouseEvent, chat: Chat) => void;
 }
 
 export function ChatList({ chats, messagesById, selectedChatId, currentUserId, users, onSelectChat, onContextMenu }: ChatListProps) {
   if (!chats.length) {
-    return <EmptyState title="Ничего не найдено" text="Попробуй изменить поисковый запрос или фильтр." />;
+    return <EmptyState title="Чатов пока нет" text="Найди пользователя по username и начни переписку." />;
   }
 
   return (

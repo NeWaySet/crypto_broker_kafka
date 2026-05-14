@@ -1,4 +1,4 @@
-import { LogOut } from "lucide-react";
+import { Database, LogOut } from "lucide-react";
 import { demoAvatars } from "../data/mockData";
 import type { DemoProfile, Settings } from "../types";
 import { Avatar } from "./Avatar";
@@ -11,9 +11,18 @@ interface SettingsModalProps {
   onSettingsChange: (settings: Settings) => void;
   onClose: () => void;
   onLogout: () => void;
+  onResetLocalDb: () => void;
 }
 
-export function SettingsModal({ profile, settings, onProfileChange, onSettingsChange, onClose, onLogout }: SettingsModalProps) {
+export function SettingsModal({
+  profile,
+  settings,
+  onProfileChange,
+  onSettingsChange,
+  onClose,
+  onLogout,
+  onResetLocalDb,
+}: SettingsModalProps) {
   return (
     <Modal title="Настройки AeroChat" onClose={onClose}>
       <div className="settings-grid">
@@ -25,11 +34,18 @@ export function SettingsModal({ profile, settings, onProfileChange, onSettingsCh
           </label>
           <label className="field">
             Username
-            <input value={profile.username} onChange={(event) => onProfileChange({ ...profile, username: event.target.value })} />
+            <input value={profile.username} readOnly />
           </label>
+          <p className="field-note">Username используется для входа и поиска, поэтому в демо он фиксируется при регистрации.</p>
           <div className="avatar-grid compact">
             {demoAvatars.map((avatar) => (
-              <button key={avatar} type="button" className={avatar === profile.avatar ? "avatar-choice active" : "avatar-choice"} onClick={() => onProfileChange({ ...profile, avatar })} aria-label={`Выбрать аватар ${avatar}`}>
+              <button
+                key={avatar}
+                type="button"
+                className={avatar === profile.avatar ? "avatar-choice active" : "avatar-choice"}
+                onClick={() => onProfileChange({ ...profile, avatar })}
+                aria-label={`Выбрать аватар ${avatar}`}
+              >
                 <Avatar label={avatar} />
               </button>
             ))}
@@ -101,13 +117,15 @@ export function SettingsModal({ profile, settings, onProfileChange, onSettingsCh
         <section>
           <h3>Активные сессии</h3>
           <div className="session-list">
-            <span>Windows Desktop · сейчас</span>
-            <span>Demo Tablet · 12 минут назад</span>
-            <span>Mobile Preview · вчера</span>
+            <span>Windows Desktop - сейчас</span>
           </div>
           <button className="danger-button" type="button" onClick={onLogout}>
             <LogOut size={16} />
-            Выйти из демо-аккаунта
+            Выйти из аккаунта
+          </button>
+          <button className="danger-button subtle" type="button" onClick={onResetLocalDb}>
+            <Database size={16} />
+            Очистить локальную БД
           </button>
         </section>
       </div>

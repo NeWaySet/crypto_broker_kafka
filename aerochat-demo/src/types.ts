@@ -84,8 +84,13 @@ export interface DemoProfile {
   avatar: string;
 }
 
-export interface AppData {
-  users: User[];
+export interface AuthAccount extends User {
+  passwordHash: string;
+  createdAt: string;
+}
+
+export interface LocalDatabase {
+  users: AuthAccount[];
   chats: Chat[];
   messages: Message[];
 }

@@ -1,35 +1,33 @@
 import { useEffect, useMemo, useState } from "react";
-import { MainLayout } from "./components/MainLayout";
 import { DemoLogin } from "./components/DemoLogin";
+import { MainLayout } from "./components/MainLayout";
 import { SettingsModal } from "./components/SettingsModal";
-import { createMockData, defaultSettings } from "./data/mockData";
-import type { AppData, Attachment, Chat, ChatFilter, DemoProfile, Message, Settings } from "./types";
-import { loadJson, removeKeys, saveJson } from "./utils/storage";
+import { defaultSettings } from "./data/mockData";
+import type { Attachment, Chat, ChatFilter, DemoProfile, LocalDatabase, Message, Settings, User } from "./types";
 import { makeId } from "./utils/format";
+import {
+  authenticate,
+  createPrivateChat,
+  emptyDatabase,
+  loadDatabase,
+  normalizeUsername,
+  privateChatBetween,
+  publicUsers,
+  registerAccount,
+  saveDatabase,
+} from "./utils/localDb";
+import { loadJson, removeKeys, saveJson } from "./utils/storage";
 
 const keys = {
-  profile: "aerochat.profile",
-  settings: "aerochat.settings",
-  data: "aerochat.data",
+  session: "aerochat.session.v2",
+  settings: "aerochat.settings.v2",
 };
 
-const autoReplies = [
-  "Принял, сейчас посмотрю.",
-  "Да, звучит нормально. Можно оставить так.",
-  "Супер, я добавил это в список.",
-  "Через пару минут вернусь с ответом.",
-  "Окей, хорошая мысль.",
-];
-
-function initialData(): AppData {
-  return loadJson<AppData>(keys.data, createMockData());
-}
-
 export default function App() {
-  const [profile, setProfile] = useState<DemoProfile | null>(() => loadJson<DemoProfile | null>(keys.profile, null));
+  const [sessionUserId, setSessionUserId] = useState<string | null>(() => loadJson<string | null>(keys.session, null));
   const [settings, setSettings] = useState<Settings>(() => loadJson<Settings>(keys.settings, defaultSettings));
-  const [data, setData] = useState<AppData>(initialData);
-  const [selectedChatId, setSelectedChatId] = useState<string>(() => data.chats.find((chat) => !chat.isArchived)?.id || data.chats[0]?.id || "");
+  const [db, setDb] = useState<LocalDatabase>(() => loadDatabase());
+  const [selectedChatId, setSelectedChatId] = useState("");
   const [filter, setFilter] = useState<ChatFilter>("all");
   const [query, setQuery] = useState("");
   const [chatQuery, setChatQuery] = useState("");
@@ -38,11 +36,19 @@ export default function App() {
   const [selectedMessageId, setSelectedMessageId] = useState<string | null>(null);
   const [replyToId, setReplyToId] = useState<string | null>(null);
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
-  const [typingChats, setTypingChats] = useState<Record<string, boolean>>({});
   const [notice, setNotice] = useState("");
 
-  const currentUserId = profile?.id || "me";
-  const selectedChat = data.chats.find((chat) => chat.id === selectedChatId) || null;
+  const currentAccount = db.users.find((user) => user.id === sessionUserId) || null;
+  const profile: DemoProfile | null = currentAccount
+    ? { id: currentAccount.id, name: currentAccount.name, username: currentAccount.username, avatar: currentAccount.avatar }
+    : null;
+  const users = useMemo(() => publicUsers(db.users), [db.users]);
+  const selectedChat = db.chats.find((chat) => chat.id === selectedChatId && chat.participants.includes(profile?.id || "")) || null;
+  const messagesById = useMemo(() => new Map(db.messages.map((message) => [message.id, message])), [db.messages]);
+
+  useEffect(() => {
+    saveDatabase(db);
+  }, [db]);
 
   useEffect(() => {
     saveJson(keys.settings, settings);
@@ -53,12 +59,8 @@ export default function App() {
   }, [settings]);
 
   useEffect(() => {
-    saveJson(keys.data, data);
-  }, [data]);
-
-  useEffect(() => {
-    if (profile) saveJson(keys.profile, profile);
-  }, [profile]);
+    if (sessionUserId) saveJson(keys.session, sessionUserId);
+  }, [sessionUserId]);
 
   useEffect(() => {
     const syncPanels = () => setRightPanelOpen(window.innerWidth >= 1180);
@@ -66,6 +68,13 @@ export default function App() {
     window.addEventListener("resize", syncPanels);
     return () => window.removeEventListener("resize", syncPanels);
   }, []);
+
+  useEffect(() => {
+    if (!profile) return;
+    const firstChat = db.chats.find((chat) => chat.participants.includes(profile.id) && !chat.isArchived);
+    if (!selectedChatId && firstChat) setSelectedChatId(firstChat.id);
+    if (selectedChatId && !db.chats.some((chat) => chat.id === selectedChatId && chat.participants.includes(profile.id))) setSelectedChatId("");
+  }, [db.chats, profile, selectedChatId]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -80,26 +89,19 @@ export default function App() {
         setSelectedMessageId(null);
       }
       if (command && event.key.toLowerCase() === "e" && selectedMessageId) {
-        const message = data.messages.find((item) => item.id === selectedMessageId);
-        if (message?.senderId === currentUserId) setEditingMessageId(message.id);
+        const message = db.messages.find((item) => item.id === selectedMessageId);
+        if (message && message.senderId === profile?.id) setEditingMessageId(message.id);
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [currentUserId, data.messages, selectedMessageId]);
+  }, [db.messages, profile?.id, selectedMessageId]);
 
-  const messagesById = useMemo(() => new Map(data.messages.map((message) => [message.id, message])), [data.messages]);
-
-  const selectedMessages = useMemo(() => {
-    return data.messages
-      .filter((message) => message.chatId === selectedChatId)
-      .filter((message) => !chatQuery || message.text.toLowerCase().includes(chatQuery.toLowerCase()))
-      .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-  }, [chatQuery, data.messages, selectedChatId]);
-
-  const filteredChats = useMemo(() => {
+  const visibleChats = useMemo(() => {
+    if (!profile) return [];
     const lower = query.toLowerCase();
-    return data.chats
+    return db.chats
+      .filter((chat) => chat.participants.includes(profile.id))
       .filter((chat) => {
         if (filter === "archive") return chat.isArchived;
         if (chat.isArchived) return false;
@@ -113,15 +115,59 @@ export default function App() {
         return !lower || chat.title.toLowerCase().includes(lower) || lastMessage?.text.toLowerCase().includes(lower);
       })
       .sort((a, b) => Number(b.isPinned) - Number(a.isPinned) || new Date(messagesById.get(b.lastMessageId)?.createdAt || 0).getTime() - new Date(messagesById.get(a.lastMessageId)?.createdAt || 0).getTime());
-  }, [data.chats, filter, messagesById, query]);
+  }, [db.chats, filter, messagesById, profile, query]);
+
+  const userSearchResults = useMemo(() => {
+    if (!profile || normalizeUsername(query).length < 2) return [];
+    const lower = normalizeUsername(query);
+    return users
+      .filter((user) => user.id !== profile.id)
+      .filter((user) => normalizeUsername(user.username).includes(lower) || user.name.toLowerCase().includes(query.toLowerCase()))
+      .slice(0, 8);
+  }, [profile, query, users]);
+
+  const selectedMessages = useMemo(() => {
+    return db.messages
+      .filter((message) => message.chatId === selectedChatId)
+      .filter((message) => !chatQuery || message.text.toLowerCase().includes(chatQuery.toLowerCase()))
+      .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+  }, [chatQuery, db.messages, selectedChatId]);
+
+  function commitDb(nextDb: LocalDatabase) {
+    setDb(nextDb);
+    saveDatabase(nextDb);
+  }
 
   function showNotice(text: string) {
     setNotice(text);
     window.setTimeout(() => setNotice(""), 2200);
   }
 
+  function login(username: string, password: string): string | null {
+    try {
+      const account = authenticate(db, username, password);
+      setSessionUserId(account.id);
+      setSelectedChatId("");
+      return null;
+    } catch (error) {
+      return error instanceof Error ? error.message : "Ошибка входа";
+    }
+  }
+
+  function register(input: { name: string; username: string; password: string; avatar: string }): string | null {
+    try {
+      const result = registerAccount(db, input);
+      commitDb(result.db);
+      setSessionUserId(result.account.id);
+      setSelectedChatId("");
+      return null;
+    } catch (error) {
+      return error instanceof Error ? error.message : "Ошибка регистрации";
+    }
+  }
+
   function updateChat(chatId: string, patch: Partial<Chat>) {
-    setData((prev) => ({ ...prev, chats: prev.chats.map((chat) => (chat.id === chatId ? { ...chat, ...patch } : chat)) }));
+    setDb((prev) => ({ ...prev, chats: prev.chats.map((chat) => (chat.id === chatId ? { ...chat, ...patch } : chat)) }));
   }
 
   function selectChat(chatId: string) {
@@ -131,12 +177,25 @@ export default function App() {
     updateChat(chatId, { unreadCount: 0 });
   }
 
+  function startChatWithUser(peer: User) {
+    if (!profile) return;
+    const existing = privateChatBetween(db.chats, profile.id, peer.id);
+    if (existing) {
+      selectChat(existing.id);
+      return;
+    }
+    const chat = createPrivateChat({ ...profile, status: "онлайн", bio: "", isOnline: true, lastSeen: new Date().toISOString() }, peer);
+    setDb((prev) => ({ ...prev, chats: [chat, ...prev.chats] }));
+    setSelectedChatId(chat.id);
+    setQuery("");
+  }
+
   function updateDraft(chatId: string, draft: string) {
     updateChat(chatId, { draft });
   }
 
   function sendMessage(text: string, attachments: Attachment[] = []) {
-    if (!selectedChat || (!text.trim() && attachments.length === 0)) return;
+    if (!profile || !selectedChat || (!text.trim() && attachments.length === 0)) return;
     if (editingMessageId) {
       editMessage(editingMessageId, text);
       setEditingMessageId(null);
@@ -145,139 +204,93 @@ export default function App() {
     const message: Message = {
       id: makeId("msg"),
       chatId: selectedChat.id,
-      senderId: currentUserId,
+      senderId: profile.id,
       text: text.trim() || (attachments[0]?.type === "audio" ? "Голосовое сообщение" : "Вложение"),
       createdAt: new Date().toISOString(),
       type: attachments[0]?.type === "audio" ? "audio" : attachments[0]?.type === "image" ? "image" : attachments[0]?.type === "video" ? "video" : attachments[0]?.type === "poll" ? "poll" : attachments.length ? "file" : "text",
-      status: "sending",
+      status: "read",
       replyToId: replyToId || undefined,
       attachments,
       reactions: [],
     };
-    setData((prev) => ({
+    setDb((prev) => ({
       ...prev,
       messages: [...prev.messages, message],
       chats: prev.chats.map((chat) => (chat.id === selectedChat.id ? { ...chat, draft: "", lastMessageId: message.id } : chat)),
     }));
     setReplyToId(null);
-    window.setTimeout(() => setMessageStatus(message.id, "delivered"), 600);
-    window.setTimeout(() => setMessageStatus(message.id, "read"), 1300);
-    scheduleAutoReply(selectedChat);
   }
 
   function sendVoice() {
     sendMessage("", [{ id: makeId("att"), type: "audio", name: "voice-demo.ogg", duration: "0:12", size: "96 KB" }]);
   }
 
-  function setMessageStatus(messageId: string, status: Message["status"]) {
-    setData((prev) => ({ ...prev, messages: prev.messages.map((message) => (message.id === messageId ? { ...message, status } : message)) }));
-  }
-
-  function scheduleAutoReply(chat: Chat) {
-    if (chat.type === "channel" || chat.type === "saved") return;
-    setTypingChats((prev) => ({ ...prev, [chat.id]: true }));
-    window.setTimeout(() => {
-      const senderId = chat.participants.find((id) => id !== currentUserId) || "u1";
-      const reply: Message = {
-        id: makeId("msg"),
-        chatId: chat.id,
-        senderId,
-        text: autoReplies[Math.floor(Math.random() * autoReplies.length)],
-        createdAt: new Date().toISOString(),
-        type: "text",
-        status: "read",
-        attachments: [],
-        reactions: [],
-      };
-      setTypingChats((prev) => ({ ...prev, [chat.id]: false }));
-      setData((prev) => ({
-        ...prev,
-        messages: [...prev.messages, reply],
-        chats: prev.chats.map((item) => (item.id === chat.id ? { ...item, lastMessageId: reply.id, unreadCount: item.id === selectedChatId ? 0 : item.unreadCount + 1 } : item)),
-      }));
-    }, 2000 + Math.random() * 2000);
-  }
-
   function editMessage(messageId: string, text: string) {
-    setData((prev) => ({ ...prev, messages: prev.messages.map((message) => (message.id === messageId ? { ...message, text, editedAt: new Date().toISOString() } : message)) }));
+    setDb((prev) => ({ ...prev, messages: prev.messages.map((message) => (message.id === messageId ? { ...message, text, editedAt: new Date().toISOString() } : message)) }));
     showNotice("Сообщение изменено");
   }
 
   function deleteMessage(messageId: string) {
-    setData((prev) => ({ ...prev, messages: prev.messages.map((message) => (message.id === messageId ? { ...message, text: "Сообщение удалено", isDeleted: true, attachments: [], reactions: [] } : message)) }));
+    setDb((prev) => ({ ...prev, messages: prev.messages.map((message) => (message.id === messageId ? { ...message, text: "Сообщение удалено", isDeleted: true, attachments: [], reactions: [] } : message)) }));
     setSelectedMessageId(null);
   }
 
   function reactToMessage(messageId: string, emoji: string) {
-    setData((prev) => ({
+    if (!profile) return;
+    setDb((prev) => ({
       ...prev,
       messages: prev.messages.map((message) => {
         if (message.id !== messageId) return message;
         const existing = message.reactions.find((reaction) => reaction.emoji === emoji);
         const reactions = existing
-          ? message.reactions.map((reaction) => (reaction.emoji === emoji ? { ...reaction, userIds: reaction.userIds.includes(currentUserId) ? reaction.userIds.filter((id) => id !== currentUserId) : [...reaction.userIds, currentUserId] } : reaction))
-          : [...message.reactions, { emoji, userIds: [currentUserId] }];
+          ? message.reactions.map((reaction) => (reaction.emoji === emoji ? { ...reaction, userIds: reaction.userIds.includes(profile.id) ? reaction.userIds.filter((id) => id !== profile.id) : [...reaction.userIds, profile.id] } : reaction))
+          : [...message.reactions, { emoji, userIds: [profile.id] }];
         return { ...message, reactions: reactions.filter((reaction) => reaction.userIds.length > 0) };
       }),
     }));
   }
 
   function clearHistory(chatId: string) {
-    setData((prev) => ({ ...prev, messages: prev.messages.filter((message) => message.chatId !== chatId), chats: prev.chats.map((chat) => (chat.id === chatId ? { ...chat, lastMessageId: "", unreadCount: 0 } : chat)) }));
+    setDb((prev) => ({ ...prev, messages: prev.messages.filter((message) => message.chatId !== chatId), chats: prev.chats.map((chat) => (chat.id === chatId ? { ...chat, lastMessageId: "", unreadCount: 0 } : chat)) }));
     showNotice("История очищена");
   }
 
   function deleteChat(chatId: string) {
-    setData((prev) => ({ ...prev, messages: prev.messages.filter((message) => message.chatId !== chatId), chats: prev.chats.filter((chat) => chat.id !== chatId) }));
-    if (selectedChatId === chatId) setSelectedChatId(data.chats.find((chat) => chat.id !== chatId)?.id || "");
+    setDb((prev) => ({ ...prev, messages: prev.messages.filter((message) => message.chatId !== chatId), chats: prev.chats.filter((chat) => chat.id !== chatId) }));
+    if (selectedChatId === chatId) setSelectedChatId("");
   }
 
   function forwardMessage(message: Message) {
-    const saved = data.chats.find((chat) => chat.type === "saved");
-    if (!saved) return;
-    const forwarded: Message = {
-      ...message,
-      id: makeId("msg"),
-      chatId: saved.id,
-      createdAt: new Date().toISOString(),
-      forwardedFrom: selectedChat?.title || "чат",
-      status: "read",
-    };
-    setData((prev) => ({ ...prev, messages: [...prev.messages, forwarded], chats: prev.chats.map((chat) => (chat.id === saved.id ? { ...chat, lastMessageId: forwarded.id, isFavorite: true } : chat)) }));
-    showNotice("Сообщение переслано в Избранное");
+    showNotice(`Пересылка подготовлена: ${message.text.slice(0, 40)}`);
   }
 
-  function createDemoChat(type: Chat["type"]) {
-    const id = makeId("chat");
-    const title = type === "group" ? "Новая группа" : type === "channel" ? "Новый канал" : "Новый контакт";
-    const chat: Chat = {
-      id,
-      type,
-      title,
-      avatar: type === "group" ? "G1" : type === "channel" ? "C3" : "N1",
-      participants: type === "private" ? ["me", "u1"] : ["me", "u1", "u2", "u3"],
-      lastMessageId: "",
-      unreadCount: 0,
-      isPinned: false,
-      isMuted: false,
-      isArchived: false,
-      isFavorite: false,
-      draft: "",
-      description: "Демо-чат создан локально.",
-    };
-    setData((prev) => ({ ...prev, chats: [chat, ...prev.chats] }));
-    setSelectedChatId(id);
+  function updateProfile(nextProfile: DemoProfile) {
+    if (!profile) return;
+    setDb((prev) => ({
+      ...prev,
+      users: prev.users.map((user) => (user.id === profile.id ? { ...user, name: nextProfile.name, avatar: nextProfile.avatar, username: nextProfile.username } : user)),
+      chats: prev.chats.map((chat) => {
+        if (!chat.participants.includes(profile.id)) return chat;
+        const peerId = chat.participants.find((id) => id !== profile.id);
+        const peer = prev.users.find((user) => user.id === peerId);
+        return peer ? { ...chat, title: peer.name, avatar: peer.avatar } : chat;
+      }),
+    }));
   }
 
   function logout() {
-    removeKeys([keys.profile, keys.settings, keys.data]);
-    setProfile(null);
-    setSettings(defaultSettings);
-    setData(createMockData());
+    removeKeys([keys.session]);
+    setSessionUserId(null);
+    setSelectedChatId("");
+  }
+
+  function resetLocalDb() {
+    commitDb(emptyDatabase());
+    logout();
   }
 
   if (!profile) {
-    return <DemoLogin settings={settings} onSettingsChange={setSettings} onLogin={setProfile} />;
+    return <DemoLogin settings={settings} onSettingsChange={setSettings} onLogin={login} onRegister={register} />;
   }
 
   return (
@@ -285,15 +298,16 @@ export default function App() {
       <MainLayout
         profile={profile}
         settings={settings}
-        users={data.users}
-        chats={filteredChats}
-        allChats={data.chats}
+        users={users}
+        userSearchResults={userSearchResults}
+        chats={visibleChats}
+        allChats={db.chats}
         messages={selectedMessages}
-        allMessages={data.messages}
+        allMessages={db.messages}
         messagesById={messagesById}
         selectedChat={selectedChat}
         selectedChatId={selectedChatId}
-        currentUserId={currentUserId}
+        currentUserId={profile.id}
         filter={filter}
         query={query}
         chatQuery={chatQuery}
@@ -301,14 +315,15 @@ export default function App() {
         selectedMessageId={selectedMessageId}
         replyToId={replyToId}
         editingMessageId={editingMessageId}
-        isTyping={Boolean(selectedChat && typingChats[selectedChat.id])}
+        isTyping={false}
         onFilterChange={setFilter}
         onQueryChange={setQuery}
         onChatQueryChange={setChatQuery}
         onSelectChat={selectChat}
+        onStartChatWithUser={startChatWithUser}
         onToggleRightPanel={() => setRightPanelOpen((value) => !value)}
         onOpenSettings={() => setSettingsOpen(true)}
-        onCreateChat={createDemoChat}
+        onCreateChat={() => showNotice("Введите username в поиске, чтобы создать чат")}
         onLogout={logout}
         onSend={sendMessage}
         onSendVoice={sendVoice}
@@ -326,7 +341,7 @@ export default function App() {
         onDeleteChat={deleteChat}
         onNotice={showNotice}
       />
-      {settingsOpen && <SettingsModal profile={profile} settings={settings} onProfileChange={setProfile} onSettingsChange={setSettings} onClose={() => setSettingsOpen(false)} onLogout={logout} />}
+      {settingsOpen && <SettingsModal profile={profile} settings={settings} onProfileChange={updateProfile} onSettingsChange={setSettings} onClose={() => setSettingsOpen(false)} onLogout={logout} onResetLocalDb={resetLocalDb} />}
       {notice && <div className="toast" role="status">{notice}</div>}
     </>
   );

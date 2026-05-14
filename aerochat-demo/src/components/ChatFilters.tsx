@@ -3,10 +3,7 @@ import type { ChatFilter } from "../types";
 const filters: Array<{ id: ChatFilter; label: string }> = [
   { id: "all", label: "Все" },
   { id: "private", label: "Личные" },
-  { id: "group", label: "Группы" },
-  { id: "channel", label: "Каналы" },
   { id: "unread", label: "Непрочитанные" },
-  { id: "favorite", label: "Избранное" },
   { id: "archive", label: "Архив" },
 ];
 
