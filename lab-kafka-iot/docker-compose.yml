@@ -68,6 +68,21 @@ services:
     profiles:
       - manual
 
+  sensor-generator:
+    build: ./sensor-generator
+    container_name: sensor-generator
+    depends_on:
+      kafka-init:
+        condition: service_completed_successfully
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      KAFKA_SENSOR_TOPIC: sensors.raw
+      SENSOR_ID: auto-sensor-1
+      INTERVAL_SECONDS: 4
+    networks:
+      - kafka-network
+    restart: unless-stopped
+
   policy-engine:
     build: ./policy-engine
     container_name: policy-engine
@@ -152,10 +167,11 @@ services:
         condition: service_started
       filter:
         condition: service_started
+      sensor-generator:
+        condition: service_started
     environment:
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       KAFKA_CHAT_INPUT_TOPIC: messages.raw
-      KAFKA_SENSOR_INPUT_TOPIC: sensors.raw
       KAFKA_CHAT_OUTPUT_TOPIC: messages.filtered
       KAFKA_SENSOR_OUTPUT_TOPIC: sensors.data.filtered
       KAFKA_GROUP_ID: web-ui

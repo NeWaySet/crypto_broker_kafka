@@ -14,7 +14,6 @@ from kafka.errors import NoBrokersAvailable
 
 BOOTSTRAP_SERVERS = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "kafka:9092")
 CHAT_INPUT_TOPIC = os.getenv("KAFKA_CHAT_INPUT_TOPIC", "messages.raw")
-SENSOR_INPUT_TOPIC = os.getenv("KAFKA_SENSOR_INPUT_TOPIC", "sensors.raw")
 CHAT_OUTPUT_TOPIC = os.getenv("KAFKA_CHAT_OUTPUT_TOPIC", "messages.filtered")
 SENSOR_OUTPUT_TOPIC = os.getenv("KAFKA_SENSOR_OUTPUT_TOPIC", "sensors.data.filtered")
 GROUP_ID = os.getenv("KAFKA_GROUP_ID", "web-ui")
@@ -93,27 +92,6 @@ def send_message():
     }
     metadata = kafka_producer().send(CHAT_INPUT_TOPIC, value=payload).get(timeout=15)
     return jsonify({"status": "sent", "topic": CHAT_INPUT_TOPIC, "offset": metadata.offset, "payload": payload})
-
-
-@app.post("/api/sensors")
-def send_sensor():
-    body = request.get_json(force=True)
-    try:
-        temperature = float(body.get("temperature"))
-        humidity = float(body.get("humidity"))
-    except (TypeError, ValueError):
-        return jsonify({"error": "temperature and humidity must be numbers"}), 400
-
-    payload = {
-        "kind": "sensor",
-        "sensor_id": str(body.get("sensor_id", "sensor_web")).strip()[:40] or "sensor_web",
-        "temperature": temperature,
-        "humidity": humidity,
-        "source": "web:sensor",
-        "timestamp": now_iso(),
-    }
-    metadata = kafka_producer().send(SENSOR_INPUT_TOPIC, value=payload).get(timeout=15)
-    return jsonify({"status": "sent", "topic": SENSOR_INPUT_TOPIC, "offset": metadata.offset, "payload": payload})
 
 
 @app.get("/api/state")

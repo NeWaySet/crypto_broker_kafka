@@ -25,6 +25,15 @@ classDiagram
         +main()
     }
 
+    class SensorGenerator {
+        <<Boundary>>
+        -string sensor_id
+        -float interval_seconds
+        +next_reading(previous_temperature, previous_humidity)
+        +connect_with_retry()
+        +main()
+    }
+
     class CryptoGateway {
         <<Service>>
         -MessageTypeStrategy classifier
@@ -113,6 +122,7 @@ classDiagram
 
     WebApp ..> KafkaTopics : publish / consume
     ProducerCli ..> KafkaTopics : publish
+    SensorGenerator ..> KafkaTopics : publish sensors.raw
     CryptoGateway ..> KafkaTopics : raw to crypto
     PolicyDecisionPoint ..> KafkaTopics : policy requests / decisions
     SecureFilter ..> KafkaTopics : crypto to filtered
@@ -125,6 +135,7 @@ classDiagram
 
     WebApp ..> MessagePayload : creates
     ProducerCli ..> MessagePayload : creates
+    SensorGenerator ..> MessagePayload : creates
     CryptoContainerFacade ..> CryptoContainer : creates
     CryptoContainerAdapter ..> CryptoContainer : opens
 ```

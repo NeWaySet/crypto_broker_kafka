@@ -66,7 +66,8 @@ def architecture_png(path):
     draw.rounded_rectangle((35, 95, 1565, 705), radius=26, outline=(208, 215, 222), width=3, fill=(248, 250, 252))
 
     boxes = {
-        "app": (60, 300, 220, 390, "Web App\nchat + sensors", (218, 232, 252), (108, 142, 191)),
+        "app": (60, 190, 220, 270, "Web App\nchat", (218, 232, 252), (108, 142, 191)),
+        "sensor_gen": (60, 420, 220, 500, "Sensor\nGenerator", (224, 242, 241), (80, 156, 144)),
         "chat_raw": (300, 190, 480, 270, "Kafka\nmessages.raw", (255, 242, 204), (214, 182, 86)),
         "sensor_raw": (300, 420, 480, 500, "Kafka\nsensors.raw", (255, 242, 204), (214, 182, 86)),
         "gateway": (570, 300, 780, 410, "Crypto Gateway\nPEP + Facade", (213, 232, 212), (130, 179, 102)),
@@ -79,8 +80,8 @@ def architecture_png(path):
     for box in boxes.values():
         draw_box(draw, box[:4], box[4], box[5], box[6])
 
-    draw_arrow(draw, (220, 335), (300, 230), "chat")
-    draw_arrow(draw, (220, 360), (300, 460), "sensors")
+    draw_arrow(draw, (220, 230), (300, 230), "chat")
+    draw_arrow(draw, (220, 460), (300, 460), "auto sensors")
     draw_arrow(draw, (480, 230), (570, 335), "raw")
     draw_arrow(draw, (480, 460), (570, 370), "raw")
     draw_arrow(draw, (675, 300), (675, 210), "allow/deny")
@@ -96,20 +97,21 @@ def sequence_png(path):
     img = Image.new("RGB", (1600, 720), "white")
     draw = ImageDraw.Draw(img)
     draw.text((40, 30), "Диаграмма взаимодействия", font=font(34), fill=(11, 37, 69))
-    xs = [130, 360, 620, 880, 1130, 1390]
-    names = ["User", "Web App", "Crypto Gateway", "Policy Engine", "Filter", "UI/Grafana"]
-    fills = [(218, 232, 252), (218, 232, 252), (213, 232, 212), (232, 222, 248), (248, 206, 204), (255, 230, 204)]
-    outlines = [(108, 142, 191), (108, 142, 191), (130, 179, 102), (150, 115, 166), (184, 84, 80), (215, 155, 0)]
+    xs = [110, 310, 520, 740, 970, 1190, 1430]
+    names = ["User", "Web App", "Sensor Gen", "Crypto Gateway", "Policy Engine", "Filter", "UI/Grafana"]
+    fills = [(218, 232, 252), (218, 232, 252), (224, 242, 241), (213, 232, 212), (232, 222, 248), (248, 206, 204), (255, 230, 204)]
+    outlines = [(108, 142, 191), (108, 142, 191), (80, 156, 144), (130, 179, 102), (150, 115, 166), (184, 84, 80), (215, 155, 0)]
     for x, name, fill, outline in zip(xs, names, fills, outlines):
         draw_box(draw, (x - 95, 115, x + 95, 180), name, fill, outline)
         draw.line((x, 180, x, 610), fill=(208, 215, 222), width=3)
     steps = [
         (xs[0], xs[1], 240, "1. input"),
-        (xs[1], xs[2], 310, "2. raw topic"),
-        (xs[2], xs[3], 380, "3. policy request"),
-        (xs[3], xs[2], 450, "4. allow/deny"),
-        (xs[2], xs[4], 520, "5. crypto container"),
-        (xs[4], xs[5], 590, "6. filtered topic"),
+        (xs[1], xs[3], 300, "2a. message raw"),
+        (xs[2], xs[3], 360, "2b. sensor raw"),
+        (xs[3], xs[4], 420, "3. policy request"),
+        (xs[4], xs[3], 480, "4. allow/deny"),
+        (xs[3], xs[5], 540, "5. crypto container"),
+        (xs[5], xs[6], 600, "6. filtered topic"),
     ]
     for sx, ex, y, label in steps:
         draw_arrow(draw, (sx, y), (ex, y), label)
@@ -190,13 +192,14 @@ def build_report():
     doc.add_heading("Цель", level=1)
     doc.add_paragraph(
         "Разработать прототип системы обмена сообщениями с криптографической защитой информации. "
-        "Основной сценарий - защищенный мессенджер. Дополнительно выделен отдельный поток данных датчиков, "
-        "чтобы показать визуализацию в Grafana."
+        "Основной сценарий - защищенный мессенджер. Дополнительно выделен автоматический поток данных датчиков, "
+        "который генерируется отдельным контейнером и подходит для визуализации в Grafana."
     )
 
     doc.add_heading("Функциональность", level=1)
     for item in [
-        "веб-интерфейс на localhost:8088 для отправки сообщений и значений датчиков;",
+        "веб-интерфейс на localhost:8088 для переписки в формате мессенджера;",
+        "sensor-generator для автоматической отправки температуры и влажности;",
         "раздельные Kafka-топики для переписки и сенсоров;",
         "policy-engine для принятия решений allow/deny;",
         "crypto-gateway для упаковки payload в криптоконтейнер;",
@@ -218,7 +221,7 @@ def build_report():
 
     doc.add_heading("Архитектура", level=1)
     doc.add_paragraph(
-        "Система разделена на изолированные контейнеры. Web App и producer не имеют ключей расшифрования. "
+        "Система разделена на изолированные контейнеры. Web App, producer и sensor-generator не имеют ключей расшифрования. "
         "Policy-engine принимает решение безопасности, а crypto-gateway применяет это решение. "
         "Открытый payload не публикуется в crypto-топики."
     )
@@ -238,7 +241,7 @@ def build_report():
     add_code(
         doc,
         """
-        allowed_sources: web:chat, web:sensor, producer:chat, producer:sensor, producer:/sample
+        allowed_sources: web:chat, sensor-generator, producer:chat, producer:sensor, producer:/sample
         allowed_message_types: chat-message, sensor-data
         max_text_length: 240
         temperature: -20..50
@@ -283,7 +286,7 @@ def build_report():
     add_code(
         doc,
         """
-        docker compose up --build -d kafka kafka-init policy-engine crypto-gateway filter consumer app grafana
+        docker compose up --build -d kafka kafka-init sensor-generator policy-engine crypto-gateway filter consumer app grafana
         http://localhost:8088
         http://localhost:3001
         """,
@@ -291,7 +294,7 @@ def build_report():
 
     doc.add_heading("Вывод", level=1)
     doc.add_paragraph(
-        "Получен прототип кибериммунной системы обмена сообщениями: чат и датчики разделены по топикам, "
+        "Получен прототип кибериммунной системы обмена сообщениями: чат и автоматический поток датчиков разделены по топикам, "
         "сообщения проходят через политику безопасности, шифруются в криптоконтейнеры и публикуются в итоговые "
         "топики только после расшифрования, очистки и валидации."
     )

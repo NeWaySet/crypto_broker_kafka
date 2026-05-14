@@ -7,59 +7,38 @@
     <link rel="stylesheet" href="/static/styles.css">
   </head>
   <body>
-    <main class="shell">
-      <header class="topbar">
-        <div>
-          <h1>Secure Kafka Messenger</h1>
-          <p>Чат и сенсоры проходят через policy-engine, crypto-gateway и filter.</p>
-        </div>
-        <span class="status" id="status">connecting</span>
-      </header>
-
-      <section class="grid">
-        <form class="panel" id="message-form">
-          <h2>Сообщение</h2>
-          <label>
-            Отправитель
-            <input name="sender" value="student" maxlength="40">
-          </label>
-          <label>
-            Текст
-            <textarea name="message" rows="5" placeholder="Введите сообщение"></textarea>
-          </label>
-          <button type="submit">Отправить в messages.raw</button>
-        </form>
-
-        <form class="panel" id="sensor-form">
-          <h2>Сенсор</h2>
-          <label>
-            ID датчика
-            <input name="sensor_id" value="sensor_web" maxlength="40">
-          </label>
-          <div class="split">
-            <label>
-              Температура
-              <input name="temperature" type="number" step="0.1" value="23.4">
-            </label>
-            <label>
-              Влажность
-              <input name="humidity" type="number" step="0.1" value="48.2">
-            </label>
+    <main class="messenger">
+      <section class="chat">
+        <header class="chat-header">
+          <div>
+            <h1>Secure Kafka Messenger</h1>
+            <p>messages.raw -> crypto container -> messages.filtered</p>
           </div>
-          <button type="submit">Отправить в sensors.raw</button>
+          <span class="status" id="status">offline</span>
+        </header>
+
+        <div class="message-list" id="messages"></div>
+
+        <form class="composer" id="message-form">
+          <input class="sender" name="sender" value="student" maxlength="40" aria-label="Отправитель">
+          <textarea name="message" rows="2" placeholder="Написать сообщение..." aria-label="Сообщение"></textarea>
+          <button type="submit">Отправить</button>
         </form>
       </section>
 
-      <section class="grid results">
-        <div class="panel">
-          <h2>messages.filtered</h2>
-          <div class="feed" id="messages"></div>
+      <aside class="telemetry">
+        <header>
+          <h2>Автодатчик</h2>
+          <p>Генератор сам отправляет значения в sensors.raw.</p>
+        </header>
+
+        <div class="sensor-summary" id="sensor-summary">
+          <span>-- °C</span>
+          <span>-- %</span>
         </div>
-        <div class="panel">
-          <h2>sensors.data.filtered</h2>
-          <div class="feed" id="sensors"></div>
-        </div>
-      </section>
+
+        <div class="sensor-feed" id="sensors"></div>
+      </aside>
     </main>
 
     <script src="/static/app.js"></script>

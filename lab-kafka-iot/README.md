@@ -5,7 +5,7 @@
 В системе есть два независимых пользовательских сценария:
 
 1. **Переписка** - пользователь отправляет текстовые сообщения через веб-интерфейс.
-2. **Датчики** - пользователь отправляет значения температуры и влажности, которые можно визуализировать в Grafana.
+2. **Датчики** - отдельный генератор сам отправляет значения температуры и влажности, которые можно визуализировать в Grafana.
 
 Оба сценария проходят один и тот же безопасный маршрут: policy check -> encryption -> crypto container -> decrypt -> sanitize/filter -> filtered topic.
 
@@ -13,7 +13,7 @@
 
 ```powershell
 cd "C:\Users\HONOR\Documents\New project 8\lab-kafka-iot"
-docker compose up --build -d kafka kafka-init policy-engine crypto-gateway filter consumer app grafana
+docker compose up --build -d kafka kafka-init sensor-generator policy-engine crypto-gateway filter consumer app grafana
 ```
 
 Открыть веб-интерфейс:
@@ -47,15 +47,15 @@ docker compose ps
 
 Это удобно для защиты и для демонстрации:
 
-- переписку можно показывать как таблицу сообщений;
+- переписку можно показывать как обычный чат;
 - датчики можно визуализировать в Grafana как графики температуры и влажности;
 - в промежуточных `*.crypto` топиках лежит не открытый JSON, а криптоконтейнер с `ciphertext`.
 
 ## Архитектура
 
 ```text
-web app / producer
-  -> messages.raw или sensors.raw
+web app / producer -> messages.raw
+sensor-generator -> sensors.raw
   -> crypto-gateway
   -> policy-engine
   -> messages.crypto или sensors.crypto
@@ -76,12 +76,21 @@ web app / producer
 http://localhost:8088
 ```
 
-В интерфейсе две формы:
+В интерфейсе есть:
 
-- отправка сообщения в чат;
-- отправка значений датчика.
+- окно переписки;
+- поле отправителя;
+- поле ввода сообщения;
+- боковая панель последних показаний автоматического датчика.
 
 Ниже отображаются последние обработанные сообщения из `messages.filtered` и `sensors.data.filtered`.
+
+### `sensor-generator`
+
+Автоматический генератор показаний датчика.
+
+Он сам, без ручного ввода пользователя, отправляет температуру и влажность в `sensors.raw`.
+Дальше эти данные проходят тот же защищенный маршрут: политика, криптоконтейнер, фильтр и `sensors.data.filtered`.
 
 ### `producer`
 
@@ -99,7 +108,7 @@ docker compose run --rm producer
 Привет, это сообщение в защищенный чат
 ```
 
-JSON с температурой/влажностью уйдет в `sensors.raw`:
+JSON с температурой/влажностью уйдет в `sensors.raw`. Это оставлено как ручной режим для проверки, основной поток датчиков создает `sensor-generator`:
 
 ```json
 {"sensor_id":"sensor_1","temperature":23.4,"humidity":48.2}
@@ -210,10 +219,15 @@ http://localhost:8088
 В блоке “Сообщение” введи текст и нажми отправку.  
 Через пару секунд сообщение появится в `messages.filtered`.
 
-### 2. Отправить данные датчика через веб
+### 2. Проверить автоматические данные датчика
 
-В блоке “Сенсор” введи температуру и влажность.  
-Результат появится в `sensors.data.filtered`.
+После запуска контейнер `sensor-generator` сам отправляет значения примерно раз в 4 секунды.
+
+Результат появится:
+
+- в боковой панели веб-интерфейса;
+- в Kafka-топике `sensors.data.filtered`;
+- в Grafana, если подключить datasource к `sensors.data.filtered`.
 
 ### 3. Посмотреть логи политики
 
@@ -264,7 +278,7 @@ docker exec kafka-broker /opt/kafka/bin/kafka-console-consumer.sh --bootstrap-se
 
 ## Проверка отказа политики
 
-Отправь датчик с неправильной температурой:
+В ручном режиме можно отправить датчик с неправильной температурой:
 
 ```json
 {"sensor_id":"bad_sensor","temperature":999,"humidity":40}
@@ -286,7 +300,7 @@ policy/policy.json
 
 Сейчас политика разрешает:
 
-- источники `web:chat`, `web:sensor`, `producer:chat`, `producer:sensor`, `producer:/sample`;
+- источники `web:chat`, `sensor-generator`, `producer:chat`, `producer:sensor`, `producer:/sample`;
 - типы `chat-message` и `sensor-data`;
 - текст длиной до 240 символов;
 - температуру от `-20` до `50`;
@@ -305,6 +319,7 @@ docker compose restart policy-engine
 | Компонент | Минимальная ответственность |
 |---|---|
 | `app` / `producer` | ввод сообщений |
+| `sensor-generator` | автоматическая генерация показаний датчика |
 | `policy-engine` | принятие решения безопасности |
 | `crypto-gateway` | применение политики и шифрование |
 | `filter` | расшифрование, очистка, валидация |
@@ -353,6 +368,7 @@ lab-kafka-iot/
 ├── policy/              # policy.json
 ├── policy-engine/       # policy decision point
 ├── producer/            # CLI producer
+├── sensor-generator/    # автоматический поток датчиков
 ├── diagrams/            # схемы: draw.io + Mermaid UML
 ├── docker-compose.yml
 └── README.md
