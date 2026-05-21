@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Light Crypto Chat</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <section id="auth" class="panel">
+        <h1>CryptoBroker Light</h1>
+        <p>Лёгкая версия из Kafka-практики: отдельный порт, отдельная SQLite-БД и AES-GCM криптоконтейнеры.</p>
+        <div class="tabs">
+          <button id="login-tab" class="active" type="button">Вход</button>
+          <button id="register-tab" type="button">Регистрация</button>
+        </div>
+        <form id="auth-form">
+          <input id="display-name" placeholder="Имя" autocomplete="off" hidden />
+          <input id="username" placeholder="username" autocomplete="off" />
+          <input id="password" placeholder="password" type="password" autocomplete="off" />
+          <button id="auth-submit" type="submit">Войти</button>
+        </form>
+        <p id="auth-error" class="error"></p>
+      </section>
+
+      <section id="chat" class="panel chat" hidden>
+        <header>
+          <div>
+            <h1>CryptoBroker Light</h1>
+            <p id="session-label"></p>
+          </div>
+          <span class="badge">AES-256-GCM</span>
+        </header>
+        <div id="messages" class="messages"></div>
+        <form id="message-form" class="composer">
+          <textarea id="message-text" placeholder="Сообщение будет сохранено как криптоконтейнер..." rows="2"></textarea>
+          <button type="submit">Отправить</button>
+        </form>
+      </section>
+
+      <aside id="crypto-view" class="panel crypto" hidden>
+        <h2>Последний криптоконтейнер</h2>
+        <pre id="container-view">{}</pre>
+      </aside>
+    </main>
+    <script src="/app.js"></script>
+  </body>
+</html>
