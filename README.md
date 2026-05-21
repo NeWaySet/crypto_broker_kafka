@@ -44,6 +44,7 @@ Producer -> Kafka -> Consumer -> Audit log
 
 | Папка / файл | Назначение |
 | --- | --- |
+| `docker-compose.yml` | Единый Docker-запуск всего проекта |
 | `CryptoBrokerWeb/` | Основная веб-версия мессенджера |
 | `CryptoBrokerWeb/src/` | React + TypeScript frontend |
 | `CryptoBrokerWeb/server/` | Node.js backend API |
@@ -93,6 +94,36 @@ Producer -> Kafka -> Consumer -> Audit log
 - Mermaid/UML
 - DOCX/PDF/PPTX-материалы
 
+## Быстрый запуск всего проекта через Docker
+
+Из корня репозитория:
+
+```powershell
+docker compose up --build
+```
+
+После запуска будут доступны:
+
+```text
+CryptoBrokerWeb: http://localhost:5174
+Backend API:      http://localhost:5175
+Kafka UI:         http://localhost:8089
+Prometheus:       http://localhost:9090
+Grafana:          http://localhost:3001
+```
+
+Логин Grafana:
+
+```text
+admin / admin
+```
+
+Остановка:
+
+```powershell
+docker compose down
+```
+
 ## Основная версия: CryptoBrokerWeb
 
 Назначение: полноценный веб-мессенджер.
@@ -111,6 +142,14 @@ Producer -> Kafka -> Consumer -> Audit log
 - просмотр криптоконтейнера в правой панели.
 
 Запуск:
+
+Через общий Docker Compose из корня проекта:
+
+```powershell
+docker compose up --build cryptobroker-api cryptobroker-web
+```
+
+Либо локально без Docker:
 
 ```powershell
 cd CryptoBrokerWeb
