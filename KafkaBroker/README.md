@@ -28,6 +28,14 @@ noise-generator -> Kafka topic cryptobroker.noise.raw
 
 ## Запуск
 
+Лучший способ - общий запуск из корня репозитория:
+
+```powershell
+docker compose up --build kafka kafka-ui kafka-producer kafka-consumer noise-generator
+```
+
+Можно запустить только эту папку:
+
 ```powershell
 cd KafkaBroker
 docker compose up --build
@@ -113,10 +121,24 @@ cryptobroker.noise.raw
 Если Kafka уже запущена:
 
 ```powershell
+docker compose run --rm kafka-producer node producer.mjs "Привет через Kafka"
+```
+
+Если запускаешь из папки `KafkaBroker`, имя сервиса будет `producer`:
+
+```powershell
 docker compose run --rm producer node producer.mjs "Привет через Kafka"
 ```
 
 ## Остановка
+
+Из корня репозитория:
+
+```powershell
+docker compose down
+```
+
+Из папки `KafkaBroker`:
 
 ```powershell
 docker compose down

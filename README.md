@@ -14,6 +14,36 @@
 - UML/Mermaid-диаграммы;
 - отчет, PDF и презентация для защиты.
 
+## Быстрый запуск через Docker
+
+Из корня репозитория:
+
+```powershell
+docker compose up --build
+```
+
+После запуска будут доступны:
+
+```text
+CryptoBrokerWeb: http://localhost:5174
+Backend API:      http://localhost:5175
+Kafka UI:         http://localhost:8089
+Prometheus:       http://localhost:9090
+Grafana:          http://localhost:3001
+```
+
+Логин Grafana:
+
+```text
+admin / admin
+```
+
+Остановка:
+
+```powershell
+docker compose down
+```
+
 ## Концепция
 
 Главная идея проекта: сообщение не должно храниться и передаваться как обычный открытый текст. Перед сохранением или отправкой оно превращается в криптоконтейнер.
@@ -38,6 +68,7 @@ React UI -> Node.js API -> Crypto Layer -> SQLite
 
 ```text
 Producer -> Kafka -> Consumer -> Audit log
+Noise generator -> Kafka -> Kafka UI
 ```
 
 ## Что где лежит
@@ -94,36 +125,6 @@ Producer -> Kafka -> Consumer -> Audit log
 - Mermaid/UML
 - DOCX/PDF/PPTX-материалы
 
-## Быстрый запуск всего проекта через Docker
-
-Из корня репозитория:
-
-```powershell
-docker compose up --build
-```
-
-После запуска будут доступны:
-
-```text
-CryptoBrokerWeb: http://localhost:5174
-Backend API:      http://localhost:5175
-Kafka UI:         http://localhost:8089
-Prometheus:       http://localhost:9090
-Grafana:          http://localhost:3001
-```
-
-Логин Grafana:
-
-```text
-admin / admin
-```
-
-Остановка:
-
-```powershell
-docker compose down
-```
-
 ## Основная версия: CryptoBrokerWeb
 
 Назначение: полноценный веб-мессенджер.
@@ -141,15 +142,13 @@ docker compose down
 - хранение новых сообщений как AES-256-GCM криптоконтейнеров;
 - просмотр криптоконтейнера в правой панели.
 
-Запуск:
-
-Через общий Docker Compose из корня проекта:
+Можно поднять только веб-часть:
 
 ```powershell
 docker compose up --build cryptobroker-api cryptobroker-web
 ```
 
-Либо локально без Docker:
+Локальный запуск без Docker:
 
 ```powershell
 cd CryptoBrokerWeb
@@ -163,18 +162,6 @@ cd CryptoBrokerWeb
 npm run dev
 ```
 
-Адрес:
-
-```text
-http://localhost:5174
-```
-
-API:
-
-```text
-http://localhost:5175
-```
-
 ## Kafka-модуль: KafkaBroker
 
 Назначение: отдельно показать Kafka как брокер сообщений между изолированными компонентами.
@@ -186,24 +173,17 @@ producer -> cryptobroker.messages.crypto -> consumer -> logs/messages.jsonl
 noise-generator -> cryptobroker.noise.raw
 ```
 
-Запуск:
+Топики:
 
-```powershell
-cd KafkaBroker
-docker compose up --build
+```text
+cryptobroker.messages.crypto
+cryptobroker.noise.raw
 ```
 
 Kafka UI:
 
 ```text
 http://localhost:8089
-```
-
-Топики:
-
-```text
-cryptobroker.messages.crypto
-cryptobroker.noise.raw
 ```
 
 ## LiteBroker
@@ -216,24 +196,11 @@ cryptobroker.noise.raw
 
 Prometheus собирает метрики backend, Grafana показывает их на дашборде.
 
-Запуск мониторинга:
-
-```powershell
-cd CryptoBrokerWeb/monitoring
-docker compose up -d
-```
-
-Адреса:
+Адреса при общем Docker-запуске:
 
 ```text
 Prometheus: http://localhost:9090
 Grafana:    http://localhost:3001
-```
-
-Логин Grafana:
-
-```text
-admin / admin
 ```
 
 ## Паттерны проектирования
