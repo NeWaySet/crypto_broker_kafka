@@ -27,7 +27,7 @@ services:
     depends_on:
       - kafka
     ports:
-      - "8089:8080"
+      - "18089:8080"
     environment:
       KAFKA_CLUSTERS_0_NAME: cryptobroker
       KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092

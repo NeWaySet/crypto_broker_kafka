@@ -27,7 +27,7 @@ docker compose up --build
 ```text
 CryptoBrokerWeb: http://localhost:5174
 Backend API:      http://localhost:5175
-Kafka UI:         http://localhost:8089
+Kafka UI:         http://localhost:18089
 Prometheus:       http://localhost:9090
 Grafana:          http://localhost:3001
 ```
@@ -183,7 +183,7 @@ cryptobroker.noise.raw
 Kafka UI:
 
 ```text
-http://localhost:8089
+http://localhost:18089
 ```
 
 ## LiteBroker

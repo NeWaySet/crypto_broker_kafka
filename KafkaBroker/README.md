@@ -44,7 +44,7 @@ docker compose up --build
 После запуска:
 
 - Kafka broker: `localhost:9092`
-- Kafka UI: `http://localhost:8089`
+- Kafka UI: `http://localhost:18089`
 - основной топик: `cryptobroker.messages.crypto`
 - шумовой топик: `cryptobroker.noise.raw`
 
@@ -53,7 +53,7 @@ docker compose up --build
 1. Открыть Kafka UI:
 
 ```text
-http://localhost:8089
+http://localhost:18089
 ```
 
 2. Перейти в `Topics`.
