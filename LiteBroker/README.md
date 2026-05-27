@@ -65,7 +65,6 @@ litebroker.sensors.random
 
 В Docker:
 
-
 - БД создается внутри Docker volume `litebroker-data`;
 - логи криптоконтейнеров пишутся в `LiteBroker/logs/chat-containers.jsonl`;
 - логи датчиков пишутся в `LiteBroker/logs/sensor-samples.jsonl`.
@@ -75,6 +74,7 @@ litebroker.sensors.random
 ```text
 LiteBroker/data/litebroker.sqlite
 ```
+
 Папка `LiteBroker/data/` может отсутствовать до первого локального запуска. При Docker-запуске файл БД обычно не виден как обычный файл в папке проекта, потому что лежит внутри volume Docker.
 
 В коде схема БД создается в `server.mjs`: таблицы `users`, `sessions`, `messages`, `sensor_samples`.
