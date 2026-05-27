@@ -1,0 +1,171 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="820" viewBox="0 0 1400 820">
+  <defs>
+    <style>
+      .bg { fill: #ffffff; }
+      .box { fill: #8ef59a; stroke: #111111; stroke-width: 2.2; }
+      .head { fill: #7ee88d; stroke: #111111; stroke-width: 2; }
+      .sep { stroke: #111111; stroke-width: 2; }
+      .line { stroke: #111111; stroke-width: 2.4; fill: none; }
+      .label { fill: #2d2d2d; font: italic 15px Arial, sans-serif; }
+      .title { fill: #111111; font: 700 24px Arial, sans-serif; }
+      .subtitle { fill: #4a4a4a; font: 16px Arial, sans-serif; }
+      .class-name { fill: #111111; font: 700 16px Arial, sans-serif; }
+      .member { fill: #111111; font: 14px Arial, sans-serif; }
+    </style>
+    <marker id="arrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="strokeWidth">
+      <path d="M 0 0 L 12 6 L 0 12 z" fill="#111111"/>
+    </marker>
+  </defs>
+
+  <rect class="bg" x="0" y="0" width="1400" height="820"/>
+  <text class="title" x="42" y="42">LiteBroker UML class diagram</text>
+  <text class="subtitle" x="1040" y="42">Kafka chat + crypto containers + sensor stream</text>
+
+  <!-- LiteBrokerUI -->
+  <g id="LiteBrokerUI">
+    <rect class="box" x="70" y="150" width="210" height="180" rx="4"/>
+    <rect class="head" x="70" y="150" width="210" height="42" rx="4"/>
+    <line class="sep" x1="70" y1="260" x2="280" y2="260"/>
+    <text class="class-name" x="175" y="177" text-anchor="middle">LiteBrokerUI</text>
+    <text class="member" x="85" y="215">+token</text>
+    <text class="member" x="85" y="235">+selectedPeer</text>
+    <text class="member" x="85" y="255">+messages</text>
+    <text class="member" x="85" y="285">+selectPeer()</text>
+    <text class="member" x="85" y="305">+sendMessage()</text>
+    <text class="member" x="85" y="325">+showContainer()</text>
+  </g>
+
+  <!-- ApiServer -->
+  <g id="ApiServer">
+    <rect class="box" x="400" y="100" width="230" height="215" rx="4"/>
+    <rect class="head" x="400" y="100" width="230" height="42" rx="4"/>
+    <line class="sep" x1="400" y1="220" x2="630" y2="220"/>
+    <text class="class-name" x="515" y="127" text-anchor="middle">ApiServer</text>
+    <text class="member" x="415" y="165">+routes</text>
+    <text class="member" x="415" y="185">+currentUser</text>
+    <text class="member" x="415" y="205">+policy</text>
+    <text class="member" x="415" y="245">+login()</text>
+    <text class="member" x="415" y="265">+register()</text>
+    <text class="member" x="415" y="285">+postMessage()</text>
+    <text class="member" x="515" y="245">+getSensors()</text>
+    <text class="member" x="515" y="265">+metrics()</text>
+  </g>
+
+  <!-- CryptoService -->
+  <g id="CryptoService">
+    <rect class="box" x="400" y="440" width="230" height="175" rx="4"/>
+    <rect class="head" x="400" y="440" width="230" height="42" rx="4"/>
+    <line class="sep" x1="400" y1="535" x2="630" y2="535"/>
+    <text class="class-name" x="515" y="467" text-anchor="middle">CryptoService</text>
+    <text class="member" x="415" y="505">+algorithm</text>
+    <text class="member" x="415" y="525">+iv</text>
+    <text class="member" x="505" y="525">+authTag</text>
+    <text class="member" x="415" y="560">+encryptMessage()</text>
+    <text class="member" x="415" y="580">+decryptMessage()</text>
+    <text class="member" x="415" y="600">+cryptoKey()</text>
+  </g>
+
+  <!-- CryptoContainer -->
+  <g id="CryptoContainer">
+    <rect class="box" x="110" y="625" width="230" height="150" rx="4"/>
+    <rect class="head" x="110" y="625" width="230" height="42" rx="4"/>
+    <line class="sep" x1="110" y1="720" x2="340" y2="720"/>
+    <text class="class-name" x="225" y="652" text-anchor="middle">CryptoContainer</text>
+    <text class="member" x="125" y="690">+version</text>
+    <text class="member" x="125" y="710">+algorithm</text>
+    <text class="member" x="235" y="690">+ciphertext</text>
+    <text class="member" x="235" y="710">+metadata</text>
+    <text class="member" x="125" y="750">+verifyAuthTag()</text>
+  </g>
+
+  <!-- Database -->
+  <g id="Database">
+    <rect class="box" x="760" y="145" width="240" height="200" rx="4"/>
+    <rect class="head" x="760" y="145" width="240" height="42" rx="4"/>
+    <line class="sep" x1="760" y1="270" x2="1000" y2="270"/>
+    <text class="class-name" x="880" y="172" text-anchor="middle">Database</text>
+    <text class="member" x="775" y="210">+users</text>
+    <text class="member" x="775" y="230">+sessions</text>
+    <text class="member" x="775" y="250">+messages</text>
+    <text class="member" x="875" y="250">+sensor_samples</text>
+    <text class="member" x="775" y="295">+openDb()</text>
+    <text class="member" x="775" y="315">+seedUsers()</text>
+    <text class="member" x="875" y="315">+userMessages()</text>
+  </g>
+
+  <!-- KafkaProducer -->
+  <g id="KafkaProducer">
+    <rect class="box" x="1110" y="145" width="235" height="180" rx="4"/>
+    <rect class="head" x="1110" y="145" width="235" height="42" rx="4"/>
+    <line class="sep" x1="1110" y1="255" x2="1345" y2="255"/>
+    <text class="class-name" x="1227.5" y="172" text-anchor="middle">KafkaProducer</text>
+    <text class="member" x="1125" y="210">+brokers</text>
+    <text class="member" x="1125" y="230">+chatTopicPrefix</text>
+    <text class="member" x="1125" y="250">+sensorTopic</text>
+    <text class="member" x="1125" y="285">+publishKafka()</text>
+    <text class="member" x="1125" y="305">+chatTopic()</text>
+  </g>
+
+  <!-- SensorGenerator -->
+  <g id="SensorGenerator">
+    <rect class="box" x="760" y="535" width="240" height="180" rx="4"/>
+    <rect class="head" x="760" y="535" width="240" height="42" rx="4"/>
+    <line class="sep" x1="760" y1="645" x2="1000" y2="645"/>
+    <text class="class-name" x="880" y="562" text-anchor="middle">SensorGenerator</text>
+    <text class="member" x="775" y="600">+intervalMs</text>
+    <text class="member" x="775" y="620">+temperature</text>
+    <text class="member" x="885" y="620">+humidity</text>
+    <text class="member" x="885" y="640">+pressure</text>
+    <text class="member" x="775" y="670">+createSample()</text>
+    <text class="member" x="775" y="690">+startGenerator()</text>
+  </g>
+
+  <!-- GrafanaMonitor -->
+  <g id="GrafanaMonitor">
+    <rect class="box" x="1110" y="530" width="235" height="170" rx="4"/>
+    <rect class="head" x="1110" y="530" width="235" height="42" rx="4"/>
+    <line class="sep" x1="1110" y1="630" x2="1345" y2="630"/>
+    <text class="class-name" x="1227.5" y="557" text-anchor="middle">GrafanaMonitor</text>
+    <text class="member" x="1125" y="595">+dashboards</text>
+    <text class="member" x="1125" y="615">+datasources</text>
+    <text class="member" x="1230" y="615">+logs</text>
+    <text class="member" x="1125" y="660">+showSensors()</text>
+    <text class="member" x="1125" y="680">+showContainers()</text>
+  </g>
+
+  <!-- Associations -->
+  <polyline class="line" points="280,240 345,240 345,205 400,205"/>
+  <text class="label" x="307" y="215">HTTP API</text>
+
+  <polyline class="line" points="515,315 515,440"/>
+  <polygon points="515,315 527,327 515,339 503,327" fill="#ffffff" stroke="#111111" stroke-width="2"/>
+  <text class="label" x="535" y="382">uses</text>
+
+  <polyline class="line" points="630,205 700,205 700,245 760,245"/>
+  <polygon points="630,205 642,217 630,229 618,217" fill="#ffffff" stroke="#111111" stroke-width="2"/>
+  <text class="label" x="670" y="190">stores</text>
+
+  <polyline class="line" points="630,140 745,140 745,95 1228,95 1228,145"/>
+  <polygon points="630,140 642,152 630,164 618,152" fill="#ffffff" stroke="#111111" stroke-width="2"/>
+  <text class="label" x="840" y="80">publishes chat topic</text>
+
+  <polyline class="line" points="400,585 300,585 300,625"/>
+  <text class="label" x="315" y="570">creates</text>
+
+  <polyline class="line" points="880,535 880,345"/>
+  <text class="label" x="900" y="445">writes</text>
+
+  <polyline class="line" points="1000,625 1060,625 1060,245 1110,245"/>
+  <text class="label" x="1070" y="430">sensor topic</text>
+
+  <polyline class="line" points="1228,325 1228,530"/>
+  <text class="label" x="1248" y="430">logs / metrics</text>
+
+  <polyline class="line" points="1000,645 1110,645"/>
+  <text class="label" x="1030" y="630">samples</text>
+
+  <text class="member" x="290" y="235">1</text>
+  <text class="member" x="742" y="238">*</text>
+  <text class="member" x="1010" y="640">1</text>
+  <text class="member" x="1092" y="640">*</text>
+</svg>

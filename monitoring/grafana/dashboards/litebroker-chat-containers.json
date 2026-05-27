@@ -1,0 +1,40 @@
+{
+  "uid": "litebroker-chat-containers",
+  "title": "LiteBroker: логи чата и криптоконтейнеры",
+  "tags": ["cryptobroker", "litebroker", "chat", "crypto"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "5s",
+  "panels": [
+    {
+      "type": "logs",
+      "title": "JSONL события криптоконтейнеров",
+      "gridPos": { "h": 12, "w": 24, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "datasource": { "type": "loki", "uid": "Loki" },
+          "expr": "{job=\"litebroker-chat-containers\"}",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "showTime": true,
+        "showLabels": false,
+        "wrapLogMessage": true
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Сообщения по Kafka-топикам",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 12 },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "Prometheus" },
+          "expr": "litebroker_chat_messages_total",
+          "legendFormat": "{{topic}}"
+        }
+      ]
+    }
+  ]
+}

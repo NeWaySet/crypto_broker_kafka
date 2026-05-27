@@ -1,32 +1,7 @@
 services:
-  cryptobroker-api:
-    build:
-      context: ./CryptoBrokerWeb
-    container_name: cryptobroker-api
-    command: ["npm", "run", "api"]
-    ports:
-      - "5175:5175"
-    environment:
-      CRYPTOBROKER_API_PORT: "5175"
-      CRYPTOBROKER_SECRET: cryptobroker-dev-secret-change-me
-    volumes:
-      - cryptobroker-data:/app/server/data
-
-  cryptobroker-web:
-    build:
-      context: ./CryptoBrokerWeb
-    container_name: cryptobroker-web
-    command: ["npm", "run", "dev"]
-    depends_on:
-      - cryptobroker-api
-    ports:
-      - "5174:5174"
-    environment:
-      VITE_API_TARGET: http://cryptobroker-api:5175
-
   kafka:
     image: apache/kafka:3.8.0
-    container_name: cryptobroker-kafka
+    container_name: litebroker-kafka
     ports:
       - "9092:9092"
     environment:
@@ -48,68 +23,68 @@ services:
 
   kafka-ui:
     image: provectuslabs/kafka-ui:v0.7.2
-    container_name: cryptobroker-kafka-ui
+    container_name: litebroker-kafka-ui
     depends_on:
       - kafka
     ports:
       - "18089:8080"
     environment:
-      KAFKA_CLUSTERS_0_NAME: cryptobroker
+      KAFKA_CLUSTERS_0_NAME: litebroker
       KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
 
-  kafka-producer:
+  litebroker:
     build:
-      context: ./KafkaBroker
-    container_name: cryptobroker-kafka-producer
+      context: ./LiteBroker
+    container_name: litebroker-app
     depends_on:
       - kafka
+    ports:
+      - "18091:18090"
     environment:
+      LIGHT_CRYPTO_CHAT_PORT: "18090"
+      LIGHT_CRYPTO_SECRET: litebroker-dev-secret-change-me
       KAFKA_BROKERS: kafka:9092
-      KAFKA_TOPIC: cryptobroker.messages.crypto
-      CRYPTOBROKER_SECRET: cryptobroker-dev-secret-change-me
-    command: ["node", "producer.mjs"]
-
-  kafka-consumer:
-    build:
-      context: ./KafkaBroker
-    container_name: cryptobroker-kafka-consumer
-    depends_on:
-      - kafka
-    environment:
-      KAFKA_BROKERS: kafka:9092
-      KAFKA_TOPIC: cryptobroker.messages.crypto
-      CRYPTOBROKER_SECRET: cryptobroker-dev-secret-change-me
-    command: ["node", "consumer.mjs"]
+      CHAT_TOPIC_PREFIX: litebroker.chat
+      SENSOR_TOPIC: litebroker.sensors.random
+      SENSOR_INTERVAL_MS: "5000"
     volumes:
-      - ./KafkaBroker/logs:/app/logs
-
-  noise-generator:
-    build:
-      context: ./KafkaBroker
-    container_name: cryptobroker-kafka-noise
-    depends_on:
-      - kafka
-    environment:
-      KAFKA_BROKERS: kafka:9092
-      KAFKA_NOISE_TOPIC: cryptobroker.noise.raw
-      CRYPTOBROKER_SECRET: cryptobroker-dev-secret-change-me
-    command: ["node", "noise-generator.mjs"]
+      - litebroker-data:/app/data
+      - ./LiteBroker/logs:/app/logs
 
   prometheus:
     image: prom/prometheus:v2.55.1
-    container_name: cryptobroker-prometheus
+    container_name: litebroker-prometheus
     depends_on:
-      - cryptobroker-api
+      - litebroker
     ports:
       - "9090:9090"
     volumes:
-      - ./CryptoBrokerWeb/monitoring/prometheus.docker.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/prometheus.docker.yml:/etc/prometheus/prometheus.yml:ro
+
+  loki:
+    image: grafana/loki:3.2.1
+    container_name: litebroker-loki
+    ports:
+      - "3100:3100"
+    command: ["-config.file=/etc/loki/local-config.yaml"]
+
+  promtail:
+    image: grafana/promtail:3.2.1
+    container_name: litebroker-promtail
+    depends_on:
+      - loki
+      - litebroker
+    volumes:
+      - ./LiteBroker/logs:/var/log/litebroker:ro
+      - ./monitoring/promtail.yml:/etc/promtail/config.yml:ro
+    command: ["-config.file=/etc/promtail/config.yml"]
 
   grafana:
     image: grafana/grafana:11.3.1
-    container_name: cryptobroker-grafana
+    container_name: litebroker-grafana
     depends_on:
       - prometheus
+      - loki
     ports:
       - "3001:3000"
     environment:
@@ -117,8 +92,10 @@ services:
       GF_SECURITY_ADMIN_PASSWORD: admin
     volumes:
       - grafana-data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
 
 volumes:
-  cryptobroker-data:
+  litebroker-data:
   kafka-data:
   grafana-data:
