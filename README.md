@@ -1,14 +1,6 @@
 # LiteBroker
 
-Оставлена легкая версия проекта: защищенный чат на Kafka, генератор датчиков, Prometheus и Grafana.
-
-## Что осталось
-
-| Путь | Зачем нужен |
-| --- | --- |
-| `LiteBroker/` | Веб-интерфейс, backend, SQLite, AES-256-GCM криптоконтейнеры, генератор датчиков |
-| `monitoring/` | Prometheus, Loki/Promtail и готовые Grafana dashboards |
-| `docker-compose.yml` | Общий запуск LiteBroker + Kafka + monitoring |
+защищенный чат на Kafka, генератор датчиков, Prometheus и Grafana.
 
 ## Запуск
 
