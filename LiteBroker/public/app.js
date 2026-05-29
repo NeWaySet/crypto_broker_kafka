@@ -277,8 +277,7 @@ els.authForm.addEventListener("submit", async (event) => {
   }
 });
 
-els.messageForm.addEventListener("submit", async (event) => {
-  event.preventDefault();
+async function sendMessage() {
   if (!selectedPeer) return;
   const text = els.messageText.value.trim();
   if (!text) return;
@@ -294,6 +293,17 @@ els.messageForm.addEventListener("submit", async (event) => {
   } finally {
     els.sendButton.disabled = false;
   }
+}
+
+els.messageForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  await sendMessage();
+});
+
+els.messageText.addEventListener("keydown", async (event) => {
+  if (event.key !== "Enter" || event.shiftKey) return;
+  event.preventDefault();
+  await sendMessage();
 });
 
 setMode("login");

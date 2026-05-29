@@ -1,4 +1,21 @@
 services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: litebroker-postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: litebroker
+      POSTGRES_USER: litebroker
+      POSTGRES_PASSWORD: litebroker
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U litebroker -d litebroker"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
   kafka:
     image: apache/kafka:3.8.0
     container_name: litebroker-kafka
@@ -37,18 +54,21 @@ services:
       context: ./LiteBroker
     container_name: litebroker-app
     depends_on:
-      - kafka
+      kafka:
+        condition: service_started
+      postgres:
+        condition: service_healthy
     ports:
       - "18091:18090"
     environment:
       LIGHT_CRYPTO_CHAT_PORT: "18090"
       LIGHT_CRYPTO_SECRET: litebroker-dev-secret-change-me
+      DATABASE_URL: postgres://litebroker:litebroker@postgres:5432/litebroker
       KAFKA_BROKERS: kafka:9092
       CHAT_TOPIC_PREFIX: litebroker.chat
       SENSOR_TOPIC: litebroker.sensors.random
       SENSOR_INTERVAL_MS: "5000"
     volumes:
-      - litebroker-data:/app/data
       - ./LiteBroker/logs:/app/logs
 
   prometheus:
@@ -96,6 +116,6 @@ services:
       - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
 
 volumes:
-  litebroker-data:
+  postgres-data:
   kafka-data:
   grafana-data:

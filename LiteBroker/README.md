@@ -1,15 +1,16 @@
 # LiteBroker
 
-Легкая версия CryptoBroker на базе Kafka. Используется для демонстрации защищенного обмена сообщениями и отдельного потока замеров датчиков.
+Лёгкая версия CryptoBroker на базе Kafka и PostgreSQL. Используется для демонстрации защищённого обмена сообщениями, отдельных Kafka-топиков для диалогов и отдельного потока замеров датчиков.
 
 ## Возможности
 
 - регистрация и вход по `username/password`;
-- выбор собеседника перед отправкой;
+- выбор собеседника перед отправкой сообщения;
 - отдельный Kafka-топик на каждый личный чат;
 - отдельный Kafka-топик для генератора датчиков;
 - AES-256-GCM криптоконтейнеры для сообщений;
-- локальная БД создается приложением автоматически во время запуска;
+- AES-256-GCM криптоконтейнеры для замеров датчиков в PostgreSQL;
+- PostgreSQL-БД для пользователей, сессий, сообщений и замеров;
 - Prometheus-метрики;
 - JSONL-логи криптоконтейнеров для Grafana/Loki.
 
@@ -18,15 +19,26 @@
 Из корня проекта:
 
 ```powershell
-docker compose up --build litebroker kafka kafka-ui prometheus loki promtail grafana
+docker compose up --build
 ```
 
 Открыть:
 
 ```text
-LiteBroker: http://localhost:18090
+LiteBroker: http://localhost:18091
 Kafka UI:   http://localhost:18089
 Grafana:    http://localhost:3001
+PostgreSQL: localhost:5432
+```
+
+Подключение к PostgreSQL:
+
+```text
+host: localhost
+port: 5432
+database: litebroker
+user: litebroker
+password: litebroker
 ```
 
 ## Тестовые пользователи
@@ -61,36 +73,29 @@ litebroker.sensors.random
 
 ## Где данные
 
-Файла БД в репозитории нет специально. Он не хранится в git, потому что это runtime-данные: пользователи, сессии, сообщения и замеры появляются уже после запуска приложения.
-
-В Docker:
-
-- БД создается внутри Docker volume `litebroker-data`;
-- логи криптоконтейнеров пишутся в `LiteBroker/logs/chat-containers.jsonl`;
-- логи датчиков пишутся в `LiteBroker/logs/sensor-samples.jsonl`.
-
-При локальном запуске SQLite находится в:
+В Docker данные PostgreSQL хранятся в volume:
 
 ```text
-LiteBroker/data/litebroker.sqlite
+postgres-data
 ```
 
-Папка `LiteBroker/data/` может отсутствовать до первого локального запуска. При Docker-запуске файл БД обычно не виден как обычный файл в папке проекта, потому что лежит внутри volume Docker.
+Схема создаётся автоматически в `server.mjs` при старте приложения:
 
-В коде схема БД создается в `server.mjs`: таблицы `users`, `sessions`, `messages`, `sensor_samples`.
+- `users`;
+- `sessions`;
+- `messages`;
+- `sensor_samples`.
 
-## API
+## Шифрование базы данных
 
-```text
-GET  /api/health
-GET  /api/users
-GET  /api/messages?peerId=<id>
-POST /api/messages
-GET  /api/sensors
-GET  /metrics
-```
+Полного Transparent Data Encryption в стандартном контейнере PostgreSQL нет. Поэтому в проекте используется прикладное шифрование перед записью в БД:
 
-## Формат криптоконтейнера
+- сообщения хранятся в `messages.crypto_container` как AES-256-GCM контейнер;
+- замеры датчиков хранятся в `sensor_samples.encrypted_payload` как AES-256-GCM контейнер;
+- пароли не хранятся в открытом виде, используется PBKDF2-SHA256 с индивидуальной солью;
+- старые открытые значения датчиков при старте мигрируются в `encrypted_payload`, после чего поля `temperature`, `humidity`, `pressure` зануляются.
+
+Формат контейнера:
 
 ```json
 {
@@ -107,4 +112,24 @@ GET  /metrics
     "createdAt": "..."
   }
 }
+```
+
+Для датчиков в `metadata` используются `sampleId`, `topic`, `createdAt` и путь хранения.
+
+## Логи для Grafana/Loki
+
+```text
+LiteBroker/logs/chat-containers.jsonl
+LiteBroker/logs/sensor-samples.jsonl
+```
+
+## API
+
+```text
+GET  /api/health
+GET  /api/users
+GET  /api/messages?peerId=<id>
+POST /api/messages
+GET  /api/sensors
+GET  /metrics
 ```

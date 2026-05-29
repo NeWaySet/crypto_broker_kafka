@@ -4,23 +4,25 @@ import { existsSync } from "node:fs";
 import { createCipheriv, createDecipheriv, pbkdf2Sync, randomBytes, timingSafeEqual } from "node:crypto";
 import { dirname, extname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { DatabaseSync } from "node:sqlite";
 import { Kafka } from "kafkajs";
+import pg from "pg";
+
+const { Pool } = pg;
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.LIGHT_CRYPTO_CHAT_PORT || 18090);
-const DATA_DIR = join(__dirname, "data");
 const LOG_DIR = join(__dirname, "logs");
-const DB_PATH = join(DATA_DIR, "light-cryptobroker.sqlite");
 const PUBLIC_DIR = join(__dirname, "public");
 const MASTER_SECRET = process.env.LIGHT_CRYPTO_SECRET || "dev-secret-change-me";
 const KAFKA_BROKERS = (process.env.KAFKA_BROKERS || "localhost:9092").split(",");
 const SENSOR_TOPIC = process.env.SENSOR_TOPIC || "litebroker.sensors.random";
 const CHAT_TOPIC_PREFIX = process.env.CHAT_TOPIC_PREFIX || "litebroker.chat";
+const DATABASE_URL = process.env.DATABASE_URL || "postgres://litebroker:litebroker@localhost:5432/litebroker";
 
-let db;
+let pool;
 let producer;
 let kafkaReady = false;
+let dbReady = false;
 let sensorTimer;
 
 function id(prefix) {
@@ -59,11 +61,43 @@ function cryptoKey() {
   return pbkdf2Sync(MASTER_SECRET, "light-crypto-chat-v2-kafka", 120_000, 32, "sha256");
 }
 
-function encryptMessage(plainText, metadata) {
+function orderedMetadata(metadata = {}) {
+  if (metadata.messageId) {
+    return {
+      messageId: metadata.messageId,
+      senderId: metadata.senderId,
+      recipientId: metadata.recipientId,
+      chatTopic: metadata.chatTopic,
+      createdAt: metadata.createdAt,
+    };
+  }
+
+  if (metadata.sampleId) {
+    return {
+      sampleId: metadata.sampleId,
+      topic: metadata.topic,
+      createdAt: metadata.createdAt,
+      storage: metadata.storage,
+    };
+  }
+
+  return Object.keys(metadata)
+    .sort()
+    .reduce((result, key) => {
+      result[key] = metadata[key];
+      return result;
+    }, {});
+}
+
+function aadBuffer(metadata) {
+  return Buffer.from(JSON.stringify(orderedMetadata(metadata)), "utf8");
+}
+
+function encryptContainer(value, metadata) {
   const iv = randomBytes(12);
   const cipher = createCipheriv("aes-256-gcm", cryptoKey(), iv);
-  cipher.setAAD(Buffer.from(JSON.stringify(metadata), "utf8"));
-  const ciphertext = Buffer.concat([cipher.update(String(plainText), "utf8"), cipher.final()]);
+  cipher.setAAD(aadBuffer(metadata));
+  const ciphertext = Buffer.concat([cipher.update(String(value), "utf8"), cipher.final()]);
   return {
     version: 2,
     algorithm: "AES-256-GCM",
@@ -74,9 +108,9 @@ function encryptMessage(plainText, metadata) {
   };
 }
 
-function decryptMessage(container) {
+function decryptContainer(container) {
   const decipher = createDecipheriv("aes-256-gcm", cryptoKey(), Buffer.from(container.iv, "base64"));
-  decipher.setAAD(Buffer.from(JSON.stringify(container.metadata), "utf8"));
+  decipher.setAAD(aadBuffer(container.metadata));
   decipher.setAuthTag(Buffer.from(container.authTag, "base64"));
   return Buffer.concat([
     decipher.update(Buffer.from(container.ciphertext, "base64")),
@@ -84,83 +118,154 @@ function decryptMessage(container) {
   ]).toString("utf8");
 }
 
+function encryptMessage(plainText, metadata) {
+  return encryptContainer(plainText, metadata);
+}
+
+function decryptMessage(container) {
+  return decryptContainer(container);
+}
+
+function encryptJsonPayload(payload, metadata) {
+  return encryptContainer(JSON.stringify(payload), metadata);
+}
+
+function decryptJsonPayload(container) {
+  return JSON.parse(decryptContainer(container));
+}
+
+async function query(sql, params = []) {
+  const database = await openDb();
+  return database.query(sql, params);
+}
+
 async function openDb() {
-  if (db) return db;
-  await mkdir(DATA_DIR, { recursive: true });
+  if (pool) return pool;
   await mkdir(LOG_DIR, { recursive: true });
-  db = new DatabaseSync(DB_PATH);
-  db.exec(`
-    PRAGMA journal_mode = WAL;
+  pool = new Pool({
+    connectionString: DATABASE_URL,
+    max: 10,
+    idleTimeoutMillis: 30_000,
+  });
+  pool.on("error", (error) => {
+    dbReady = false;
+    console.error("PostgreSQL pool error:", error.message);
+  });
+
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS users (
       id TEXT PRIMARY KEY,
       username TEXT NOT NULL UNIQUE,
       display_name TEXT NOT NULL,
       password_hash TEXT NOT NULL,
       password_salt TEXT NOT NULL,
-      created_at TEXT NOT NULL
+      created_at TIMESTAMPTZ NOT NULL
     );
+
     CREATE TABLE IF NOT EXISTS sessions (
       token TEXT PRIMARY KEY,
-      user_id TEXT NOT NULL,
-      created_at TEXT NOT NULL,
-      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      created_at TIMESTAMPTZ NOT NULL
     );
+
     CREATE TABLE IF NOT EXISTS messages (
       id TEXT PRIMARY KEY,
       chat_topic TEXT NOT NULL,
-      sender_id TEXT NOT NULL,
+      sender_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       sender_name TEXT NOT NULL,
-      recipient_id TEXT NOT NULL,
+      recipient_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       recipient_name TEXT NOT NULL,
-      crypto_container TEXT NOT NULL,
-      created_at TEXT NOT NULL,
-      kafka_offset TEXT,
-      FOREIGN KEY (sender_id) REFERENCES users(id) ON DELETE CASCADE,
-      FOREIGN KEY (recipient_id) REFERENCES users(id) ON DELETE CASCADE
+      crypto_container JSONB NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL,
+      kafka_offset TEXT
     );
+
+    CREATE INDEX IF NOT EXISTS idx_messages_users_created
+      ON messages (sender_id, recipient_id, created_at);
+
+    CREATE INDEX IF NOT EXISTS idx_messages_topic
+      ON messages (chat_topic);
+
     CREATE TABLE IF NOT EXISTS sensor_samples (
       id TEXT PRIMARY KEY,
       topic TEXT NOT NULL,
-      temperature REAL NOT NULL,
-      humidity REAL NOT NULL,
-      pressure REAL NOT NULL,
-      created_at TEXT NOT NULL
+      temperature DOUBLE PRECISION,
+      humidity DOUBLE PRECISION,
+      pressure DOUBLE PRECISION,
+      encrypted_payload JSONB,
+      created_at TIMESTAMPTZ NOT NULL
     );
+
+    CREATE INDEX IF NOT EXISTS idx_sensor_samples_created
+      ON sensor_samples (created_at DESC);
   `);
-  try {
-    db.exec("ALTER TABLE messages ADD COLUMN chat_topic TEXT NOT NULL DEFAULT 'litebroker.chat.legacy'");
-  } catch (error) {
-    if (!String(error.message || "").includes("duplicate column name")) throw error;
-  }
-  try {
-    db.exec("ALTER TABLE messages ADD COLUMN recipient_id TEXT NOT NULL DEFAULT ''");
-  } catch (error) {
-    if (!String(error.message || "").includes("duplicate column name")) throw error;
-  }
-  try {
-    db.exec("ALTER TABLE messages ADD COLUMN recipient_name TEXT NOT NULL DEFAULT ''");
-  } catch (error) {
-    if (!String(error.message || "").includes("duplicate column name")) throw error;
-  }
-  try {
-    db.exec("ALTER TABLE messages ADD COLUMN kafka_offset TEXT");
-  } catch (error) {
-    if (!String(error.message || "").includes("duplicate column name")) throw error;
-  }
-  seedUsers(db);
-  return db;
+  await migrateSensorEncryption();
+  dbReady = true;
+  await seedUsers();
+  return pool;
 }
 
-function seedUsers(database) {
-  const total = database.prepare("SELECT COUNT(*) AS total FROM users").get().total;
-  if (total > 0) return;
-  for (const demo of [
+async function migrateSensorEncryption() {
+  await pool.query(`
+    ALTER TABLE sensor_samples ADD COLUMN IF NOT EXISTS encrypted_payload JSONB;
+    ALTER TABLE sensor_samples ALTER COLUMN temperature DROP NOT NULL;
+    ALTER TABLE sensor_samples ALTER COLUMN humidity DROP NOT NULL;
+    ALTER TABLE sensor_samples ALTER COLUMN pressure DROP NOT NULL;
+  `);
+
+  const { rows } = await pool.query(`
+    SELECT id, topic, temperature, humidity, pressure, created_at
+    FROM sensor_samples
+    WHERE encrypted_payload IS NULL
+      AND temperature IS NOT NULL
+      AND humidity IS NOT NULL
+      AND pressure IS NOT NULL
+    ORDER BY created_at ASC
+    LIMIT 2000
+  `);
+
+  for (const row of rows) {
+    const createdAt = new Date(row.created_at).toISOString();
+    const encryptedPayload = encryptJsonPayload(
+      {
+        temperature: Number(row.temperature),
+        humidity: Number(row.humidity),
+        pressure: Number(row.pressure),
+      },
+      {
+        sampleId: row.id,
+        topic: row.topic,
+        createdAt,
+        storage: "postgres.sensor_samples.encrypted_payload",
+      },
+    );
+    await pool.query(
+      `UPDATE sensor_samples
+       SET encrypted_payload = $1::jsonb,
+           temperature = NULL,
+           humidity = NULL,
+           pressure = NULL
+       WHERE id = $2`,
+      [JSON.stringify(encryptedPayload), row.id],
+    );
+  }
+}
+
+async function seedUsers() {
+  const { rows } = await pool.query("SELECT COUNT(*)::int AS total FROM users");
+  if (rows[0].total > 0) return;
+
+  for (const [username, displayName] of [
     ["alice", "Алиса"],
     ["bob", "Боб"],
     ["sensor_admin", "Администратор датчиков"],
   ]) {
     const hashed = passwordHash("123456");
-    database.prepare("INSERT INTO users VALUES (?, ?, ?, ?, ?, ?)").run(id("user"), demo[0], demo[1], hashed.hash, hashed.salt, now());
+    await pool.query(
+      `INSERT INTO users (id, username, display_name, password_hash, password_salt, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [id("user"), username, displayName, hashed.hash, hashed.salt, now()],
+    );
   }
 }
 
@@ -236,10 +341,10 @@ function error(response, status, message) {
 async function currentUser(request) {
   const token = (request.headers.authorization || "").replace(/^Bearer /, "");
   if (!token) return null;
-  const database = await openDb();
-  const session = database.prepare("SELECT * FROM sessions WHERE token = ?").get(token);
-  if (!session) return null;
-  return database.prepare("SELECT * FROM users WHERE id = ?").get(session.user_id) || null;
+  const { rows: sessions } = await query("SELECT * FROM sessions WHERE token = $1", [token]);
+  if (!sessions.length) return null;
+  const { rows: users } = await query("SELECT * FROM users WHERE id = $1", [sessions[0].user_id]);
+  return users[0] || null;
 }
 
 function publicUser(user) {
@@ -247,7 +352,7 @@ function publicUser(user) {
 }
 
 function messageDto(row) {
-  const container = JSON.parse(row.crypto_container);
+  const container = typeof row.crypto_container === "string" ? JSON.parse(row.crypto_container) : row.crypto_container;
   let textValue = "";
   try {
     textValue = decryptMessage(container);
@@ -261,23 +366,65 @@ function messageDto(row) {
     senderName: row.sender_name,
     recipientId: row.recipient_id,
     recipientName: row.recipient_name,
-    createdAt: row.created_at,
+    createdAt: new Date(row.created_at).toISOString(),
     text: textValue,
     cryptoContainer: container,
     kafkaOffset: row.kafka_offset || "",
   };
 }
 
-function userMessages(database, userId, peerId = "") {
+function sensorDto(row) {
+  const createdAt = new Date(row.created_at).toISOString();
+  const container = typeof row.encrypted_payload === "string" ? JSON.parse(row.encrypted_payload) : row.encrypted_payload;
+
+  if (container) {
+    try {
+      const payload = decryptJsonPayload(container);
+      return {
+        id: row.id,
+        topic: row.topic,
+        temperature: Number(payload.temperature),
+        humidity: Number(payload.humidity),
+        pressure: Number(payload.pressure),
+        created_at: createdAt,
+        encrypted: true,
+      };
+    } catch {
+      return {
+        id: row.id,
+        topic: row.topic,
+        temperature: 0,
+        humidity: 0,
+        pressure: 0,
+        created_at: createdAt,
+        encrypted: true,
+        decryptError: true,
+      };
+    }
+  }
+
+  return {
+    id: row.id,
+    topic: row.topic,
+    temperature: Number(row.temperature),
+    humidity: Number(row.humidity),
+    pressure: Number(row.pressure),
+    created_at: createdAt,
+    encrypted: false,
+  };
+}
+
+async function userMessages(userId, peerId = "") {
   const params = peerId ? [userId, userId, peerId, peerId] : [userId, userId];
   const sql = peerId
     ? `SELECT * FROM messages
-       WHERE (sender_id = ? OR recipient_id = ?) AND (sender_id = ? OR recipient_id = ?)
+       WHERE (sender_id = $1 OR recipient_id = $2) AND (sender_id = $3 OR recipient_id = $4)
        ORDER BY created_at ASC LIMIT 200`
     : `SELECT * FROM messages
-       WHERE sender_id = ? OR recipient_id = ?
+       WHERE sender_id = $1 OR recipient_id = $2
        ORDER BY created_at ASC LIMIT 200`;
-  return database.prepare(sql).all(...params).map(messageDto);
+  const { rows } = await query(sql, params);
+  return rows.map(messageDto);
 }
 
 async function appendChatLog(event) {
@@ -289,7 +436,6 @@ async function appendSensorLog(event) {
 }
 
 async function createSensorSample() {
-  const database = await openDb();
   const createdAt = now();
   const sample = {
     id: id("sensor"),
@@ -299,7 +445,24 @@ async function createSensorSample() {
     pressure: Number((735 + Math.random() * 35).toFixed(2)),
     createdAt,
   };
-  database.prepare("INSERT INTO sensor_samples VALUES (?, ?, ?, ?, ?, ?)").run(sample.id, sample.topic, sample.temperature, sample.humidity, sample.pressure, sample.createdAt);
+  const encryptedPayload = encryptJsonPayload(
+    {
+      temperature: sample.temperature,
+      humidity: sample.humidity,
+      pressure: sample.pressure,
+    },
+    {
+      sampleId: sample.id,
+      topic: sample.topic,
+      createdAt,
+      storage: "postgres.sensor_samples.encrypted_payload",
+    },
+  );
+  await query(
+    `INSERT INTO sensor_samples (id, topic, encrypted_payload, created_at)
+     VALUES ($1, $2, $3::jsonb, $4)`,
+    [sample.id, sample.topic, JSON.stringify(encryptedPayload), sample.createdAt],
+  );
   await publishKafka(SENSOR_TOPIC, "random-sensor", { eventType: "sensor.sample", ...sample });
   await appendSensorLog({ eventType: "sensor.sample", ...sample });
 }
@@ -307,34 +470,39 @@ async function createSensorSample() {
 function startSensorGenerator() {
   if (sensorTimer) return;
   sensorTimer = setInterval(() => {
-    createSensorSample().catch((error) => console.error("sensor generator failed:", error));
+    createSensorSample().catch((generationError) => console.error("sensor generator failed:", generationError));
   }, Number(process.env.SENSOR_INTERVAL_MS || 5000));
 }
 
 async function metrics() {
-  const database = await openDb();
-  const users = database.prepare("SELECT COUNT(*) AS total FROM users").get().total;
-  const messages = database.prepare("SELECT COUNT(*) AS total FROM messages").get().total;
-  const sensors = database.prepare("SELECT COUNT(*) AS total FROM sensor_samples").get().total;
-  const lastSensor = database.prepare("SELECT * FROM sensor_samples ORDER BY created_at DESC LIMIT 1").get();
-  const topics = database.prepare("SELECT chat_topic, COUNT(*) AS total FROM messages GROUP BY chat_topic").all();
+  const [{ rows: userRows }, { rows: messageRows }, { rows: sensorRows }, { rows: lastSensorRows }, { rows: topicRows }] = await Promise.all([
+    query("SELECT COUNT(*)::int AS total FROM users"),
+    query("SELECT COUNT(*)::int AS total FROM messages"),
+    query("SELECT COUNT(*)::int AS total FROM sensor_samples"),
+    query("SELECT * FROM sensor_samples ORDER BY created_at DESC LIMIT 1"),
+    query("SELECT chat_topic, COUNT(*)::int AS total FROM messages GROUP BY chat_topic"),
+  ]);
   const lines = [
     "# HELP litebroker_users_total Total users",
     "# TYPE litebroker_users_total gauge",
-    `litebroker_users_total ${users}`,
+    `litebroker_users_total ${userRows[0].total}`,
     "# HELP litebroker_messages_total Total chat messages",
     "# TYPE litebroker_messages_total gauge",
-    `litebroker_messages_total ${messages}`,
+    `litebroker_messages_total ${messageRows[0].total}`,
     "# HELP litebroker_sensor_samples_total Total sensor samples",
     "# TYPE litebroker_sensor_samples_total gauge",
-    `litebroker_sensor_samples_total ${sensors}`,
+    `litebroker_sensor_samples_total ${sensorRows[0].total}`,
     "# HELP litebroker_kafka_ready Kafka producer status",
     "# TYPE litebroker_kafka_ready gauge",
     `litebroker_kafka_ready ${kafkaReady ? 1 : 0}`,
+    "# HELP litebroker_postgres_ready PostgreSQL database status",
+    "# TYPE litebroker_postgres_ready gauge",
+    `litebroker_postgres_ready ${dbReady ? 1 : 0}`,
   ];
-  for (const row of topics) {
+  for (const row of topicRows) {
     lines.push(`litebroker_chat_messages_total{topic="${row.chat_topic}"} ${row.total}`);
   }
+  const lastSensor = lastSensorRows[0] ? sensorDto(lastSensorRows[0]) : null;
   if (lastSensor) {
     lines.push(`litebroker_sensor_temperature_celsius ${lastSensor.temperature}`);
     lines.push(`litebroker_sensor_humidity_percent ${lastSensor.humidity}`);
@@ -344,10 +512,22 @@ async function metrics() {
 }
 
 async function api(request, response, url) {
-  const database = await openDb();
+  await openDb();
 
   if (url.pathname === "/api/health") {
-    return json(response, 200, { ok: true, port: PORT, database: "sqlite", kafka: kafkaReady, encryption: "AES-256-GCM" });
+    return json(response, 200, {
+      ok: true,
+      port: PORT,
+      database: "postgresql",
+      postgres: dbReady,
+      kafka: { ready: kafkaReady },
+      encryption: "AES-256-GCM",
+      databaseEncryption: {
+        messages: "AES-256-GCM crypto_container JSONB",
+        sensors: "AES-256-GCM encrypted_payload JSONB",
+        passwords: "PBKDF2-SHA256 salted hash",
+      },
+    });
   }
 
   if (url.pathname === "/metrics") {
@@ -359,7 +539,8 @@ async function api(request, response, url) {
     const username = normalizeUsername(input.username);
     if (!/^[a-z0-9_]{3,24}$/.test(username)) return error(response, 400, "Username: 3-24 символа, латиница, цифры и _");
     if (String(input.password || "").length < 6) return error(response, 400, "Пароль минимум 6 символов");
-    if (database.prepare("SELECT id FROM users WHERE username = ?").get(username)) return error(response, 409, "Username уже занят");
+    const { rows: exists } = await query("SELECT id FROM users WHERE username = $1", [username]);
+    if (exists.length) return error(response, 409, "Username уже занят");
 
     const hashed = passwordHash(input.password);
     const user = {
@@ -368,18 +549,23 @@ async function api(request, response, url) {
       displayName: String(input.displayName || username).trim().slice(0, 40),
       createdAt: now(),
     };
-    database.prepare("INSERT INTO users VALUES (?, ?, ?, ?, ?, ?)").run(user.id, user.username, user.displayName, hashed.hash, hashed.salt, user.createdAt);
+    await query(
+      `INSERT INTO users (id, username, display_name, password_hash, password_salt, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [user.id, user.username, user.displayName, hashed.hash, hashed.salt, user.createdAt],
+    );
     const token = id("session");
-    database.prepare("INSERT INTO sessions VALUES (?, ?, ?)").run(token, user.id, now());
+    await query("INSERT INTO sessions (token, user_id, created_at) VALUES ($1, $2, $3)", [token, user.id, now()]);
     return json(response, 201, { token, user: publicUser({ ...user, display_name: user.displayName }) });
   }
 
   if (url.pathname === "/api/auth/login" && request.method === "POST") {
     const input = await body(request);
-    const user = database.prepare("SELECT * FROM users WHERE username = ?").get(normalizeUsername(input.username));
+    const { rows } = await query("SELECT * FROM users WHERE username = $1", [normalizeUsername(input.username)]);
+    const user = rows[0];
     if (!user || !passwordOk(input.password || "", user)) return error(response, 401, "Неверный username или пароль");
     const token = id("session");
-    database.prepare("INSERT INTO sessions VALUES (?, ?, ?)").run(token, user.id, now());
+    await query("INSERT INTO sessions (token, user_id, created_at) VALUES ($1, $2, $3)", [token, user.id, now()]);
     return json(response, 200, { token, user: publicUser(user) });
   }
 
@@ -387,18 +573,19 @@ async function api(request, response, url) {
   if (!user) return error(response, 401, "Нужна авторизация");
 
   if (url.pathname === "/api/users" && request.method === "GET") {
-    const users = database.prepare("SELECT * FROM users WHERE id != ? ORDER BY username ASC").all(user.id).map(publicUser);
-    return json(response, 200, { user: publicUser(user), users });
+    const { rows } = await query("SELECT * FROM users WHERE id != $1 ORDER BY username ASC", [user.id]);
+    return json(response, 200, { user: publicUser(user), users: rows.map(publicUser) });
   }
 
   if (url.pathname === "/api/messages" && request.method === "GET") {
     const peerId = url.searchParams.get("peerId") || "";
-    return json(response, 200, { user: publicUser(user), messages: userMessages(database, user.id, peerId) });
+    return json(response, 200, { user: publicUser(user), messages: await userMessages(user.id, peerId) });
   }
 
   if (url.pathname === "/api/messages" && request.method === "POST") {
     const input = await body(request);
-    const recipient = database.prepare("SELECT * FROM users WHERE id = ?").get(String(input.recipientId || ""));
+    const { rows: recipients } = await query("SELECT * FROM users WHERE id = $1", [String(input.recipientId || "")]);
+    const recipient = recipients[0];
     if (!recipient || recipient.id === user.id) return error(response, 400, "Выберите собеседника");
     const messageText = String(input.text || "").trim();
     if (!messageText) return error(response, 400, "Сообщение пустое");
@@ -409,15 +596,14 @@ async function api(request, response, url) {
     const container = encryptMessage(messageText, metadata);
     const event = { eventType: "chat.message.container", id: messageId, chatTopic: topic, createdAt, cryptoContainer: container };
     const kafkaResult = await publishKafka(topic, topic, event);
-    database
-      .prepare(`
-        INSERT INTO messages (
-          id, chat_topic, sender_id, sender_name, recipient_id, recipient_name,
-          crypto_container, created_at, kafka_offset
-        )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `)
-      .run(
+
+    await query(
+      `INSERT INTO messages (
+        id, chat_topic, sender_id, sender_name, recipient_id, recipient_name,
+        crypto_container, created_at, kafka_offset
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9)`,
+      [
         messageId,
         topic,
         user.id,
@@ -427,15 +613,19 @@ async function api(request, response, url) {
         JSON.stringify(container),
         createdAt,
         kafkaResult.offset || "",
-      );
+      ],
+    );
     await appendChatLog(event);
-    const row = database.prepare("SELECT * FROM messages WHERE id = ?").get(messageId);
-    return json(response, 201, { message: messageDto(row), kafka: kafkaResult });
+    const { rows } = await query("SELECT * FROM messages WHERE id = $1", [messageId]);
+    return json(response, 201, { message: messageDto(rows[0]), kafka: kafkaResult });
   }
 
   if (url.pathname === "/api/sensors" && request.method === "GET") {
-    const samples = database.prepare("SELECT * FROM sensor_samples ORDER BY created_at DESC LIMIT 50").all().reverse();
-    return json(response, 200, { topic: SENSOR_TOPIC, samples });
+    const { rows } = await query("SELECT * FROM sensor_samples ORDER BY created_at DESC LIMIT 50");
+    return json(response, 200, {
+      topic: SENSOR_TOPIC,
+      samples: rows.reverse().map(sensorDto),
+    });
   }
 
   return error(response, 404, "Маршрут не найден");

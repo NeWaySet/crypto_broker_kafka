@@ -1,0 +1,53 @@
+<mxfile host="app.diagrams.net" modified="2026-05-29T00:00:00.000Z" agent="Codex" version="24.0.0" type="device">
+  <diagram id="LiteBroker_architecture" name="LiteBroker_architecture">
+    <mxGraphModel dx="1600" dy="900" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1169" pageHeight="827" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+        
+        <mxCell id="ui" value="Browser UI" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1f5fe;strokeColor=#1565c0;" vertex="1" parent="1">
+          <mxGeometry x="40" y="190" width="140" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="api" value="LiteBroker API&lt;br&gt;Auth + CryptoService" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1f5fe;strokeColor=#1565c0;" vertex="1" parent="1">
+          <mxGeometry x="260" y="190" width="190" height="90" as="geometry"/>
+        </mxCell>
+        <mxCell id="pg" value="PostgreSQL&lt;br&gt;encrypted JSONB" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1f5fe;strokeColor=#1565c0;" vertex="1" parent="1">
+          <mxGeometry x="560" y="70" width="180" height="80" as="geometry"/>
+        </mxCell>
+        <mxCell id="kafka" value="Kafka&lt;br&gt;chat/sensor topics" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1f5fe;strokeColor=#1565c0;" vertex="1" parent="1">
+          <mxGeometry x="560" y="210" width="180" height="80" as="geometry"/>
+        </mxCell>
+        <mxCell id="logs" value="JSONL logs" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1f5fe;strokeColor=#1565c0;" vertex="1" parent="1">
+          <mxGeometry x="560" y="350" width="180" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="prom" value="Prometheus" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1f5fe;strokeColor=#1565c0;" vertex="1" parent="1">
+          <mxGeometry x="860" y="90" width="160" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="loki" value="Loki + Promtail" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1f5fe;strokeColor=#1565c0;" vertex="1" parent="1">
+          <mxGeometry x="860" y="290" width="180" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="grafana" value="Grafana&lt;br&gt;2 dashboards" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1f5fe;strokeColor=#1565c0;" vertex="1" parent="1">
+          <mxGeometry x="860" y="450" width="180" height="80" as="geometry"/>
+        </mxCell>
+        <mxCell id="e1" value="HTTP" style="endArrow=block;html=1;rounded=0;strokeColor=#1565c0;" edge="1" parent="1" source="ui" target="api">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e2" value="SQL" style="endArrow=block;html=1;rounded=0;strokeColor=#1565c0;" edge="1" parent="1" source="api" target="pg">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e3" value="publish" style="endArrow=block;html=1;rounded=0;strokeColor=#1565c0;" edge="1" parent="1" source="api" target="kafka">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e4" value="append" style="endArrow=block;html=1;rounded=0;strokeColor=#1565c0;" edge="1" parent="1" source="api" target="logs">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e5" value="datasource" style="endArrow=block;html=1;rounded=0;strokeColor=#1565c0;" edge="1" parent="1" source="prom" target="grafana">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e6" value="datasource" style="endArrow=block;html=1;rounded=0;strokeColor=#1565c0;" edge="1" parent="1" source="loki" target="grafana">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
